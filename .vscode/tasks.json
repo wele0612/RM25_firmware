@@ -1,0 +1,48 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "Build STM32 Firmware",
+            //"command": "make -j LDSCRIPT=__STM32H723VGTx_FLASH.ld",
+            "command": "make -j",
+            "args": [],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build"
+        },
+        {
+            "type": "shell",
+            "label": "Build and download (CMSIS-DAP)",
+            "command": "make",
+            "args": [
+                "-f",
+                "flash.mk",
+                "INTERFACE=cmsis-dap",
+                "load"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+            "dependsOn": "Build STM32 Firmware"
+        },
+        {
+            "type": "shell",
+            "label": "Build and download (ST-link)",
+            "command": "make",
+            "args": [
+                "-f",
+                "flash.mk",
+                "INTERFACE=stlink-v2",
+                "load"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "build",
+            "dependsOn": "Build STM32 Firmware"
+        }
+    ]
+}
