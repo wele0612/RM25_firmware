@@ -59,8 +59,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define LED_PC13_Pin GPIO_PIN_13
 #define LED_PC13_GPIO_Port GPIOC
-#define BUZZER_Pin GPIO_PIN_15
-#define BUZZER_GPIO_Port GPIOB
+#define IMU_CS_Pin GPIO_PIN_0
+#define IMU_CS_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 
