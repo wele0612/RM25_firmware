@@ -29,7 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <application.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -114,19 +114,18 @@ int main(void)
   MX_OCTOSPI2_Init();
   MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
-
+  robot_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    robot_loop();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    //HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_15);
-    HAL_Delay(250);
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+
   }
   /* USER CODE END 3 */
 }

@@ -71,7 +71,12 @@ Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim_ex.c \
 Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart.c \
-Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c
+Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c \
+$(wildcard ./Application/Src/*.c) \
+$(wildcard ./Application/Src/bsp/*.c) \
+$(wildcard ./Application/Src/robots/*.c) \
+$(wildcard ./Application/Src/platform/*.c) \
+$(wildcard ./ThirdParty/Fusion/*.c) 
 
 # ASM sources
 ASM_SOURCES =  \
@@ -136,7 +141,10 @@ C_INCLUDES =  \
 -IDrivers/STM32H7xx_HAL_Driver/Inc \
 -IDrivers/STM32H7xx_HAL_Driver/Inc/Legacy \
 -IDrivers/CMSIS/Device/ST/STM32H7xx/Include \
--IDrivers/CMSIS/Include
+-IDrivers/CMSIS/Include \
+-IApplication/Inc \
+-IApplication \
+-IThirdParty/Fusion
 
 
 # compile gcc flags
