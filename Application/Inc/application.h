@@ -3,6 +3,13 @@
 
 #include <stdint.h>
 
+#include <main.h>
+#include <gpio.h>
+#include <spi.h>
+#include <tim.h>
+#include <usart.h>
+#include <octospi.h>
+
 void robot_init();
 void robot_step(const float CTRL_DELTA_T); // bind to interruption with fixed frequency.
 void robot_loop();

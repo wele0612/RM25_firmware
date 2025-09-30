@@ -113,6 +113,7 @@ int main(void)
   MX_USART10_UART_Init();
   MX_OCTOSPI2_Init();
   MX_SPI2_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   robot_init();
   /* USER CODE END 2 */
