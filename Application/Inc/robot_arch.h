@@ -3,6 +3,8 @@
 
 #include<config.h>
 
+#include <motors.h>
+
 // Gimbal Platform Combinations
 #ifdef CONFIG_PLATFORM_GIMBAL
     #ifdef CONFIG_ROBOT_INFANTRY_BALANCE
@@ -39,6 +41,7 @@
     #ifdef CONFIG_ROBOT_AIMING_BENCH
         // BASE + AIMING_BENCH configuration
         typedef struct robot_motors_t{
+            report_M3508_t wheel_LF;
 
         }robot_motors_t;
 

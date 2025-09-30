@@ -3,6 +3,9 @@
 #include <buzzer.h>
 #include <h7can.h>
 
+#include <robot_arch.h>
+robot_motors_t motors;
+
 void robot_init(){
     can_bsp_init();
     buzzer_DJI_startup();
