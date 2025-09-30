@@ -45,6 +45,7 @@
         "application.h": "c",
         "control_system.h": "c",
         "ddt_motorcan.h": "c",
-        "usart.h": "c"
+        "usart.h": "c",
+        "h7can.h": "c"
     }
 }

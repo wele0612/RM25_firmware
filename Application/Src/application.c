@@ -1,9 +1,14 @@
 #include<application.h>
 
+#include <buzzer.h>
+#include <h7can.h>
+
 void robot_init(){
-    HAL_TIM_Base_Start_IT(&htim7);
+    can_bsp_init();
+    buzzer_DJI_startup();
 
     controller_init();
+    HAL_TIM_Base_Start_IT(&htim7);
 }
 
 void robot_step(const float CTRL_DELTA_T){

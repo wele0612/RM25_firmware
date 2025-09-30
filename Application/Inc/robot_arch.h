@@ -1,0 +1,52 @@
+#ifndef __ROBOT_ARCH_H
+#define __ROBOT_ARCH_H
+
+#include<config.h>
+
+// Gimbal Platform Combinations
+#ifdef CONFIG_PLATFORM_GIMBAL
+    #ifdef CONFIG_ROBOT_INFANTRY_BALANCE
+        // GIMBAL + INFANTRY_BALANCE configuration
+    #endif
+    
+    #ifdef CONFIG_ROBOT_INFANTRY_OMNI
+        // GIMBAL + INFANTRY_OMNI configuration
+    #endif
+    
+    #ifdef CONFIG_ROBOT_HERO
+        // GIMBAL + HERO configuration
+    #endif
+    
+    #ifdef CONFIG_ROBOT_AIMING_BENCH
+        // GIMBAL + AIMING_BENCH configuration
+    #endif
+#endif
+
+// Base Platform Combinations
+#ifdef CONFIG_PLATFORM_BASE
+    #ifdef CONFIG_ROBOT_INFANTRY_BALANCE
+        // BASE + INFANTRY_BALANCE configuration
+    #endif
+    
+    #ifdef CONFIG_ROBOT_INFANTRY_OMNI
+        // BASE + INFANTRY_OMNI configuration
+    #endif
+    
+    #ifdef CONFIG_ROBOT_HERO
+        // BASE + HERO configuration
+    #endif
+    
+    #ifdef CONFIG_ROBOT_AIMING_BENCH
+        // BASE + AIMING_BENCH configuration
+        typedef struct robot_motors_t{
+
+        }robot_motors_t;
+
+        typedef struct robot_ctrl_t{
+
+        }robot_ctrl_t;
+    #endif
+#endif
+
+
+#endif
