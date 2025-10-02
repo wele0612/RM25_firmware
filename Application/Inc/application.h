@@ -10,7 +10,12 @@
 #include <usart.h>
 #include <octospi.h>
 
+#define VOFA_TAIL {0x00, 0x00, 0x80, 0x7f}
 
+typedef struct robot_VOFA_report_t{
+    float val[10];
+    unsigned char tail[4];
+}robot_VOFA_report_t;
 
 void robot_init();
 void robot_step(const float CTRL_DELTA_T); // bind to interruption with fixed frequency.

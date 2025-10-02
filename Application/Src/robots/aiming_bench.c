@@ -34,7 +34,6 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_torque_M3508(tx_buffer,\
         lf_torque, 0.0f, 0.0f, 0.0f), 8);
-
     
 }
 
