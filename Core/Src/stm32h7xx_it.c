@@ -44,7 +44,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-extern imu_data_t imu;
+extern imu_data_t imu, imu_clean;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -346,7 +346,7 @@ void TIM6_DAC_IRQHandler(void)
   /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
   __HAL_TIM_CLEAR_FLAG(&htim6, TIM_FLAG_UPDATE);
   
-  imu_update_ahrs(&imu, 1.0f/20e3f);
+  imu_update_ahrs(&imu, &imu_clean, 1.0f/20e3f);
 
   /* USER CODE END TIM6_DAC_IRQn 0 */
   /* USER CODE BEGIN TIM6_DAC_IRQn 1 */

@@ -50,6 +50,7 @@
         "robot_arch.h": "c",
         "spi.h": "c",
         "icm42688.h": "c",
-        "fusionahrs.h": "c"
+        "fusionahrs.h": "c",
+        "buzzer.h": "c"
     }
 }

@@ -9,7 +9,6 @@
 typedef struct imu_data_t{
     float gyro[3];
     float acc[3];
-    float tempreture;
     float yaw;
     float pitch;
     float roll;
@@ -18,8 +17,8 @@ typedef struct imu_data_t{
 
 int icm_init();
 
-int icm_read_all_data(float accel_data[3], float gyro_data[3], float *temperature);
-int imu_update_ahrs(imu_data_t *imu, const float SAMPLE_PERIOD);
+int icm_read_all_data(float accel_data[3], float gyro_data[3]);
+int imu_update_ahrs(imu_data_t *imu, imu_data_t *imu_clean, float SAMPLE_PERIOD);
 
 /* ---------------------------
  * Common / bank selection

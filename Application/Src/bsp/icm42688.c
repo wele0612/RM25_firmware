@@ -1,5 +1,7 @@
 #include <icm42688.h>
 
+#include <utils.h>
+
 //#include <Fusion.h>
 #include <math.h>
 #include <string.h>
@@ -581,18 +583,18 @@ int icm_init(){
  * @param temperature: 温度数据指针，单位：°C
  * @return 0成功，-1失败
  */
-int icm_read_all_data(float accel_data[3], float gyro_data[3], float *temperature){
-    uint8_t buffer[14]; // 加速度6字节 + 陀螺仪6字节 + 温度2字节
+int icm_read_all_data(float accel_data[3], float gyro_data[3]){
+    uint8_t buffer[12]; // 加速度6字节 + 陀螺仪6字节
     
     // 从加速度计X数据寄存器开始连续读取
-    for(int i = 0; i < 14; i++){
+    for(int i = 0; i < 12; i++){
         if(icm_read_byte(0x1F + i, &buffer[i]) != 0){
             return -1;
         }
     }
     
     // 解析原始数据
-    int16_t accel_raw[3], gyro_raw[3], temp_raw;
+    int16_t accel_raw[3], gyro_raw[3];
     
     // 加速度原始数据
     accel_raw[0] = (int16_t)((buffer[0] << 8) | buffer[1]); // X轴
@@ -604,8 +606,8 @@ int icm_read_all_data(float accel_data[3], float gyro_data[3], float *temperatur
     gyro_raw[1] = (int16_t)((buffer[8] << 8) | buffer[9]);   // Y轴
     gyro_raw[2] = (int16_t)((buffer[10] << 8) | buffer[11]); // Z轴
     
-    // 温度原始数据
-    temp_raw = (int16_t)((buffer[12] << 8) | buffer[13]);
+    // // 温度原始数据
+    // temp_raw = (int16_t)((buffer[12] << 8) | buffer[13]);
     
     // 转换为物理单位
     
@@ -621,8 +623,8 @@ int icm_read_all_data(float accel_data[3], float gyro_data[3], float *temperatur
     gyro_data[1] = gyro_raw[1] / gyro_sensitivity; // Y轴 (deg/s)
     gyro_data[2] = gyro_raw[2] / gyro_sensitivity; // Z轴 (deg/s)
     
-    // 温度转换
-    *temperature = (temp_raw / 132.48f) + 25.0f; // °C
+    // // 温度转换
+    // *temperature = (temp_raw / 132.48f) + 25.0f; // °C
     
     // --- 重要：清除数据就绪中断标志 ---
     // 读取INT_STATUS寄存器会自动清除DATA_RDY_INT标志位
@@ -632,11 +634,13 @@ int icm_read_all_data(float accel_data[3], float gyro_data[3], float *temperatur
     return 0;
 }
 
+iir_filter_t iir[sizeof(imu_data_t)/4];
+
 // --- AHRS update ---
-int imu_update_ahrs(imu_data_t* imu, float SAMPLE_PERIOD){
+int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD){
     imu_data_t imu_old = *imu;
 
-    if(icm_read_all_data(imu->acc, imu->gyro, &imu->tempreture)!=0) return -1;
+    if(icm_read_all_data(imu->acc, imu->gyro)!=0) return -1;
 
     HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
 
@@ -656,6 +660,17 @@ int imu_update_ahrs(imu_data_t* imu, float SAMPLE_PERIOD){
     imu->yaw = ahrs.yaw;
     imu->pitch = ahrs.pitch;
     imu->roll = ahrs.roll;
+
+    float* imu_f=(void *)imu;
+    float* imu_clean_f=(void *)imu_clean;
+
+    // 二阶Butterworth滤波器 (fs=20kHz, fc=600Hz)
+    const float a[4] = {1.0f, -1.734725768809275f, 0.7660066009432638f, 0.0f};
+    const float b[4] = {0.007820208033497193f, 0.015640416066994386f, 0.007820208033497193f, 0.0f};
+
+    for(int i=0;i<sizeof(imu_data_t)/4;i++){
+        imu_clean_f[i]=filter_iir_eval(&iir[i], imu_f[i], 2, a, b);
+    }
 
     HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
 

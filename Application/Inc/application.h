@@ -10,6 +10,8 @@
 #include <usart.h>
 #include <octospi.h>
 
+#include <utils.h>
+
 #define VOFA_TAIL {0x00, 0x00, 0x80, 0x7f}
 
 typedef struct robot_VOFA_report_t{
