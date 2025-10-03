@@ -676,3 +676,14 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
 
     return 0;
 }
+
+imu_data_t imu, imu_clean;
+
+void imu_update(){
+    imu_update_ahrs(&imu, &imu_clean, 1.0f/20e3f);
+}
+
+void imu_obtain_data(imu_data_t *data){
+    memcpy(data, &imu_clean, sizeof(imu_data_t));
+    return;
+}

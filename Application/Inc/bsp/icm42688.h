@@ -18,7 +18,9 @@ typedef struct imu_data_t{
 int icm_init();
 
 int icm_read_all_data(float accel_data[3], float gyro_data[3]);
-int imu_update_ahrs(imu_data_t *imu, imu_data_t *imu_clean, float SAMPLE_PERIOD);
+
+void imu_update();
+void imu_obtain_data(imu_data_t* data);
 
 /* ---------------------------
  * Common / bank selection
