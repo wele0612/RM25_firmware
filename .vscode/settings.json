@@ -48,6 +48,7 @@
         "usart.h": "c",
         "h7can.h": "c",
         "robot_arch.h": "c",
-        "spi.h": "c"
+        "spi.h": "c",
+        "icm42688.h": "c"
     }
 }

@@ -2,6 +2,7 @@
 
 #include <Fusion.h>
 
+#define ICM_CLK_GEN_TIM (&htim1)
 #define ICM_USE_SPI     (&hspi2)
 
 /**
@@ -134,6 +135,8 @@ FusionAhrs ahrs;
  */
 
 int icm_init(){
+    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
+
     HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, SET);
     FusionAhrsInitialise(&ahrs);
     HAL_Delay(10); // 等待电源稳定

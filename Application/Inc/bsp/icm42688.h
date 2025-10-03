@@ -2,6 +2,7 @@
 #define __ICM42688_H
 
 #include<spi.h>
+#include<tim.h>
 
 #include<stdint.h>
 
