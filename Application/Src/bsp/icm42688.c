@@ -10,33 +10,85 @@
 #ifndef DEG2RAD
 #define DEG2RAD (3.14159265358979323846f / 180.0f)
 #endif
-
 typedef struct {
-    float q[4];      // 四元数 [w, x, y, z]
-    float integralFB[3]; // 积分反馈
+    float q[4];
+    float integralFB[3];
     float Kp;
+    float Kp_max;
     float Ki;
-    float roll;            // rad
-    float pitch;           // rad
-    float yaw;             // rad
+    float integral_limit;
+    float accel_reject_thresh;    // g
+    float gyro_boost_thresh;      // rad/s
+    float boost_duration;         // s
+    float boost_timer;
+    float last_gyro_norm;
+    float gyro_drop_trigger;      // rad/s
+    float gyro_dot_trigger;       // rad/s^2
+    float centripetal_omega_thresh; // rad/s
+    float centripetal_trust;      // scale for accel trust
+    // smoothing + fast settle
+    float accel_norm_lpf;
+    float accel_lpf_alpha;        // LPF alpha for accel norm
+    float fast_settle_timer;
+    float fast_settle_duration;   // s
+    // outputs
+    float roll;
+    float pitch;
+    float yaw;
 } MahonyAHRS;
 MahonyAHRS ahrs;
 
-static inline void Mahony_Init(MahonyAHRS *mahony, float Kp, float Ki) {
-    mahony->q[0] = 1.0f; mahony->q[1] = 0.0f; mahony->q[2] = 0.0f; mahony->q[3] = 0.0f;
-    memset(mahony->integralFB, 0, sizeof(float)*3);
-    mahony->Kp = Kp;
-    mahony->Ki = Ki;
+static inline float clamp_f(float v, float lo, float hi){
+    if(v < lo) return lo;
+    if(v > hi) return hi;
+    return v;
 }
 
+static inline void Mahony_Init(MahonyAHRS *mahony, float Kp, float Ki) {
+    (void)Kp; (void)Ki;
+    mahony->q[0]=1.0f; mahony->q[1]=0.0f; mahony->q[2]=0.0f; mahony->q[3]=0.0f;
+    mahony->integralFB[0]=mahony->integralFB[1]=mahony->integralFB[2]=0.0f;
+
+    // 激进参数（用于快速收敛），可根据实测再微调
+    mahony->Kp = 3.0f;            // 基础 Kp（比之前大）
+    mahony->Kp_max = 30.0f;       // 极限 boost（短时使用）
+    mahony->Ki = 0.06f;           // 积分用于慢漂移校正
+    mahony->integral_limit = 0.25f;
+    mahony->accel_reject_thresh = 0.22f; // g
+    mahony->gyro_boost_thresh = 0.8f;    // rad/s (≈46°/s)
+    mahony->boost_duration = 0.02f;      // 20 ms 短时 boost
+    mahony->boost_timer = 0.0f;
+    mahony->last_gyro_norm = 0.0f;
+
+    mahony->gyro_drop_trigger = 0.4f;    // 更敏感的减速触发
+    mahony->gyro_dot_trigger = 18.0f;    // 更敏感的陀螺突变触发
+    mahony->centripetal_omega_thresh = 3.0f; // 降低阈值，更早检测向心影响
+    mahony->centripetal_trust = 0.08f;   // 强力压低加速度可信度
+
+    mahony->accel_norm_lpf = 1.0f;
+    mahony->accel_lpf_alpha = 0.08f;     // 低通系数（短时平滑）
+    mahony->fast_settle_duration = 0.015f; // 15 ms very-fast settle window
+    mahony->fast_settle_timer = 0.0f;
+
+    mahony->roll = mahony->pitch = mahony->yaw = 0.0f;
+}
+
+// Mahony update with accel-lpf, aggressive boost and fast-settle
 static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const float gyro[3], float dt){
     float ax = acc[0], ay = acc[1], az = acc[2];
     float gx = gyro[0], gy = gyro[1], gz = gyro[2];
-    float q0=mahony->q[0], q1=mahony->q[1], q2=mahony->q[2], q3=mahony->q[3];
+    float q0 = mahony->q[0], q1 = mahony->q[1], q2 = mahony->q[2], q3 = mahony->q[3];
 
-    float norm = sqrtf(ax*ax + ay*ay + az*az);
-    if(norm < 1e-6f) return;
-    ax/=norm; ay/=norm; az/=norm;
+    float accel_norm = sqrtf(ax*ax + ay*ay + az*az);
+    if(accel_norm < 1e-6f) return;
+
+    // LPF accel norm to avoid instant spikes messing trust calculation
+    mahony->accel_norm_lpf = mahony->accel_norm_lpf * (1.0f - mahony->accel_lpf_alpha)
+                             + accel_norm * mahony->accel_lpf_alpha;
+    float anorm = mahony->accel_norm_lpf;
+
+    // normalize accel vector using raw values (not lpf) for direction, but trust uses lpf
+    ax /= accel_norm; ay /= accel_norm; az /= accel_norm;
 
     float vx = 2.0f*(q1*q3 - q0*q2);
     float vy = 2.0f*(q0*q1 + q2*q3);
@@ -46,34 +98,88 @@ static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const f
     float ey = (az*vx - ax*vz);
     float ez = (ax*vy - ay*vx);
 
-    if(mahony->Ki>0.0f){
-        mahony->integralFB[0]+=mahony->Ki*ex*dt;
-        mahony->integralFB[1]+=mahony->Ki*ey*dt;
-        mahony->integralFB[2]+=mahony->Ki*ez*dt;
+    float accel_err = fabsf(anorm - 1.0f); // use LPF'ed norm
+    float accel_trust = clamp_f(1.0f - accel_err / mahony->accel_reject_thresh, 0.0f, 1.0f);
+
+    float gyro_norm = sqrtf(gx*gx + gy*gy + gz*gz);
+    float gyro_dot = (gyro_norm - mahony->last_gyro_norm) / dt;
+
+    // sensitive triggers for boost (both drop and rapid change)
+    float gyro_drop = mahony->last_gyro_norm - gyro_norm;
+    if(gyro_drop > mahony->gyro_drop_trigger || fabsf(gyro_dot) > mahony->gyro_dot_trigger) {
+        mahony->boost_timer = mahony->boost_duration;
+    }
+    mahony->last_gyro_norm = gyro_norm;
+
+    if(mahony->boost_timer > 0.0f) {
+        mahony->boost_timer -= dt;
+        if(mahony->boost_timer < 0.0f) mahony->boost_timer = 0.0f;
+    }
+
+    // centripetal detection: high omega + significant accel error -> reduce trust strongly
+    if(gyro_norm > mahony->centripetal_omega_thresh && accel_err > (mahony->accel_reject_thresh * 0.5f)) {
+        accel_trust *= mahony->centripetal_trust;
+    }
+
+    // compute Kp_eff (aggressive)
+    float Kp_eff;
+    if(accel_trust < 0.12f) {
+        Kp_eff = mahony->Kp * 0.08f;
+        mahony->integralFB[0]=mahony->integralFB[1]=mahony->integralFB[2]=0.0f;
+    } else {
+        if(mahony->boost_timer > 0.0f || gyro_norm <= mahony->gyro_boost_thresh) {
+            Kp_eff = mahony->Kp_max * accel_trust;
+        } else {
+            float t = 1.0f - clamp_f(gyro_norm / (mahony->gyro_boost_thresh * 3.0f), 0.0f, 1.0f);
+            float base = mahony->Kp + (mahony->Kp_max - mahony->Kp) * t;
+            Kp_eff = base * accel_trust;
+        }
+    }
+
+    // fast settle: if very low angular rate and accel trusted, apply an extra short multiplier
+    if(gyro_norm < 0.20f && accel_trust > 0.7f) {
+        mahony->fast_settle_timer = mahony->fast_settle_duration;
+    }
+    if(mahony->fast_settle_timer > 0.0f) {
+        mahony->fast_settle_timer -= dt;
+        // temporary very strong Kp multiplier
+        Kp_eff *= 2.2f;
+    }
+
+    // dynamic Ki: disable in high dynamic or low trust
+    float Ki_eff = mahony->Ki;
+    if(accel_trust < 0.30f || gyro_norm > (mahony->centripetal_omega_thresh * 1.2f)) Ki_eff = 0.0f;
+
+    if(Ki_eff > 0.0f) {
+        mahony->integralFB[0] = clamp_f(mahony->integralFB[0] + Ki_eff * ex * dt, -mahony->integral_limit, mahony->integral_limit);
+        mahony->integralFB[1] = clamp_f(mahony->integralFB[1] + Ki_eff * ey * dt, -mahony->integral_limit, mahony->integral_limit);
+        mahony->integralFB[2] = clamp_f(mahony->integralFB[2] + Ki_eff * ez * dt, -mahony->integral_limit, mahony->integral_limit);
         gx += mahony->integralFB[0];
         gy += mahony->integralFB[1];
         gz += mahony->integralFB[2];
     }
 
-    gx += mahony->Kp*ex;
-    gy += mahony->Kp*ey;
-    gz += mahony->Kp*ez;
+    gx += Kp_eff * ex;
+    gy += Kp_eff * ey;
+    gz += Kp_eff * ez;
 
-    float qDot0 = 0.5f*(-q1*gx - q2*gy - q3*gz);
-    float qDot1 = 0.5f*(q0*gx + q2*gz - q3*gy);
-    float qDot2 = 0.5f*(q0*gy - q1*gz + q3*gx);
-    float qDot3 = 0.5f*(q0*gz + q1*gy - q2*gx);
+    float qDot0 = 0.5f * (-q1*gx - q2*gy - q3*gz);
+    float qDot1 = 0.5f * (q0*gx + q2*gz - q3*gy);
+    float qDot2 = 0.5f * (q0*gy - q1*gz + q3*gx);
+    float qDot3 = 0.5f * (q0*gz + q1*gy - q2*gx);
 
-    q0 += qDot0*dt; q1 += qDot1*dt; q2 += qDot2*dt; q3 += qDot3*dt;
-    norm = sqrtf(q0*q0 + q1*q1 + q2*q2 + q3*q3);
-    q0/=norm; q1/=norm; q2/=norm; q3/=norm;
+    q0 += qDot0 * dt; q1 += qDot1 * dt; q2 += qDot2 * dt; q3 += qDot3 * dt;
+    float qnorm = sqrtf(q0*q0 + q1*q1 + q2*q2 + q3*q3);
+    if(qnorm > 1e-9f) { q0/=qnorm; q1/=qnorm; q2/=qnorm; q3/=qnorm; }
 
     mahony->q[0]=q0; mahony->q[1]=q1; mahony->q[2]=q2; mahony->q[3]=q3;
 
-    mahony->roll  = atan2f(2.0f*(q0*q1 + q2*q3), 1.0f-2.0f*(q1*q1+q2*q2));
-    mahony->pitch = asinf(-2.0f*(q1*q3 - q0*q2));
-    mahony->yaw   = atan2f(2.0f*(q0*q3 + q1*q2), 1.0f-2.0f*(q2*q2+q3*q3));
+    mahony->roll  = atan2f(2.0f*(q0*q1 + q2*q3), 1.0f - 2.0f*(q1*q1 + q2*q2));
+    mahony->pitch = asinf(clamp_f(-2.0f*(q1*q3 - q0*q2), -1.0f, 1.0f));
+    mahony->yaw   = atan2f(2.0f*(q0*q3 + q1*q2), 1.0f - 2.0f*(q2*q2 + q3*q3));
 }
+
+
 
 /**
  * @brief 读取ICM-42688-P单个寄存器
