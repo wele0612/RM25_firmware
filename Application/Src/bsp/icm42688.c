@@ -10,159 +10,266 @@
 #ifndef DEG2RAD
 #define DEG2RAD (3.14159265358979323846f / 180.0f)
 #endif
+
+static inline float clamp_f(float v, float lo, float hi){
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+
+// ---------- MahonyAHRS struct (merged & smoothed) ----------
 typedef struct {
     float q[4];
     float integralFB[3];
+
     float Kp;
     float Kp_max;
     float Ki;
+    float Kd;                 // derivative damping (small)
+
     float integral_limit;
-    float accel_reject_thresh;    // g
-    float gyro_boost_thresh;      // rad/s
-    float boost_duration;         // s
+    float accel_reject_thresh;
+    float gyro_boost_thresh;
+    float boost_duration;
     float boost_timer;
     float last_gyro_norm;
-    float gyro_drop_trigger;      // rad/s
-    float gyro_dot_trigger;       // rad/s^2
-    float centripetal_omega_thresh; // rad/s
-    float centripetal_trust;      // scale for accel trust
-    // smoothing + fast settle
+
+    float gyro_drop_trigger;
+    float gyro_dot_trigger;
+    float centripetal_omega_thresh;
+    float centripetal_trust;
+
     float accel_norm_lpf;
-    float accel_lpf_alpha;        // LPF alpha for accel norm
+    float accel_lpf_alpha;
+
+    // gyro LPF to reduce high-frequency noise
+    float gyro_lpf[3];
+    float gyro_lpf_alpha;
+
+    // fast settle
     float fast_settle_timer;
-    float fast_settle_duration;   // s
-    // outputs
+    float fast_settle_duration;
+
+    // Kp smoothing state
+    float kp_state;
+    float kp_ramp_time;
+
+    // last error and edot LPF
+    float last_ex, last_ey, last_ez;
+    float edot_lpf_x, edot_lpf_y, edot_lpf_z;
+    float edot_lpf_alpha;
+
+    // error LPF (to remove step-injection into correction)
+    float err_lpf_x, err_lpf_y, err_lpf_z;
+    float err_lpf_alpha;
+
+    // boost shape power for smooth decay
+    float boost_shape_power;
+
     float roll;
     float pitch;
     float yaw;
 } MahonyAHRS;
-MahonyAHRS ahrs;
 
-static inline float clamp_f(float v, float lo, float hi){
-    if(v < lo) return lo;
-    if(v > hi) return hi;
-    return v;
-}
+static MahonyAHRS ahrs;
 
+// ---------- Mahony init (call once in icm_init) ----------
 static inline void Mahony_Init(MahonyAHRS *mahony, float Kp, float Ki) {
     (void)Kp; (void)Ki;
-    mahony->q[0]=1.0f; mahony->q[1]=0.0f; mahony->q[2]=0.0f; mahony->q[3]=0.0f;
+
+    mahony->q[0]=1.0f; mahony->q[1]=mahony->q[2]=mahony->q[3]=0.0f;
     mahony->integralFB[0]=mahony->integralFB[1]=mahony->integralFB[2]=0.0f;
 
-    // 激进参数（用于快速收敛），可根据实测再微调
-    mahony->Kp = 3.0f;            // 基础 Kp（比之前大）
-    mahony->Kp_max = 30.0f;       // 极限 boost（短时使用）
-    mahony->Ki = 0.06f;           // 积分用于慢漂移校正
-    mahony->integral_limit = 0.25f;
+    // Tuned values: somewhat aggressive but with HF suppression and smooth boost
+    mahony->Kp = 3.5f;             // base proportional gain
+    mahony->Kp_max = 30.0f;        // allowed boosted Kp (short)
+    mahony->Ki = 0.02f;            // small integral
+    mahony->Kd = 0.03f;            // small derivative damping
+
+    mahony->integral_limit = 0.20f;
     mahony->accel_reject_thresh = 0.22f; // g
-    mahony->gyro_boost_thresh = 0.8f;    // rad/s (≈46°/s)
-    mahony->boost_duration = 0.02f;      // 20 ms 短时 boost
+    mahony->gyro_boost_thresh = 0.9f;    // rad/s
+    mahony->boost_duration = 0.025f;     // seconds
     mahony->boost_timer = 0.0f;
     mahony->last_gyro_norm = 0.0f;
 
-    mahony->gyro_drop_trigger = 0.4f;    // 更敏感的减速触发
-    mahony->gyro_dot_trigger = 18.0f;    // 更敏感的陀螺突变触发
-    mahony->centripetal_omega_thresh = 3.0f; // 降低阈值，更早检测向心影响
-    mahony->centripetal_trust = 0.08f;   // 强力压低加速度可信度
+    mahony->gyro_drop_trigger = 0.35f;
+    mahony->gyro_dot_trigger = 28.0f;
+    mahony->centripetal_omega_thresh = 3.0f;
+    mahony->centripetal_trust = 0.08f;
 
     mahony->accel_norm_lpf = 1.0f;
-    mahony->accel_lpf_alpha = 0.08f;     // 低通系数（短时平滑）
-    mahony->fast_settle_duration = 0.015f; // 15 ms very-fast settle window
+    mahony->accel_lpf_alpha = 0.08f;
+
+    mahony->gyro_lpf[0]=mahony->gyro_lpf[1]=mahony->gyro_lpf[2]=0.0f;
+    mahony->gyro_lpf_alpha = 0.20f;
+
+    mahony->fast_settle_duration = 0.012f;
     mahony->fast_settle_timer = 0.0f;
+
+    mahony->kp_state = mahony->Kp;
+    mahony->kp_ramp_time = 0.020f; // slower ramp to reduce step excitation
+
+    mahony->last_ex = mahony->last_ey = mahony->last_ez = 0.0f;
+    mahony->edot_lpf_x = mahony->edot_lpf_y = mahony->edot_lpf_z = 0.0f;
+    mahony->edot_lpf_alpha = 0.30f;
+
+    mahony->err_lpf_x = mahony->err_lpf_y = mahony->err_lpf_z = 0.0f;
+    mahony->err_lpf_alpha = 0.18f; // error LPF
+
+    mahony->boost_shape_power = 2.0f; // quadratic decay
 
     mahony->roll = mahony->pitch = mahony->yaw = 0.0f;
 }
 
-// Mahony update with accel-lpf, aggressive boost and fast-settle
+// ---------- Mahony update (smoothed, use gyro in rad/s, dt in seconds) ----------
 static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const float gyro[3], float dt){
+    // light sanity
+    if (dt <= 0.0f) return;
+
+    // apply light gyro LPF to reduce HF noise
+    float gx = mahony->gyro_lpf[0] * (1.0f - mahony->gyro_lpf_alpha) + gyro[0] * mahony->gyro_lpf_alpha;
+    float gy = mahony->gyro_lpf[1] * (1.0f - mahony->gyro_lpf_alpha) + gyro[1] * mahony->gyro_lpf_alpha;
+    float gz = mahony->gyro_lpf[2] * (1.0f - mahony->gyro_lpf_alpha) + gyro[2] * mahony->gyro_lpf_alpha;
+    mahony->gyro_lpf[0]=gx; mahony->gyro_lpf[1]=gy; mahony->gyro_lpf[2]=gz;
+
     float ax = acc[0], ay = acc[1], az = acc[2];
-    float gx = gyro[0], gy = gyro[1], gz = gyro[2];
     float q0 = mahony->q[0], q1 = mahony->q[1], q2 = mahony->q[2], q3 = mahony->q[3];
 
     float accel_norm = sqrtf(ax*ax + ay*ay + az*az);
-    if(accel_norm < 1e-6f) return;
+    if (accel_norm < 1e-6f) return;
 
-    // LPF accel norm to avoid instant spikes messing trust calculation
+    // LPF accel norm (use for trust calc). Use small alpha for smoothing.
     mahony->accel_norm_lpf = mahony->accel_norm_lpf * (1.0f - mahony->accel_lpf_alpha)
                              + accel_norm * mahony->accel_lpf_alpha;
     float anorm = mahony->accel_norm_lpf;
 
-    // normalize accel vector using raw values (not lpf) for direction, but trust uses lpf
+    // normalize raw accel direction for error calculation (use instantaneous direction)
     ax /= accel_norm; ay /= accel_norm; az /= accel_norm;
 
+    // Estimated gravity direction from quaternion
     float vx = 2.0f*(q1*q3 - q0*q2);
     float vy = 2.0f*(q0*q1 + q2*q3);
     float vz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
 
+    // error: cross product between measured (acc) and estimated gravity
     float ex = (ay*vz - az*vy);
     float ey = (az*vx - ax*vz);
     float ez = (ax*vy - ay*vx);
 
-    float accel_err = fabsf(anorm - 1.0f); // use LPF'ed norm
+    // error LPF: smooth ex/ey/ez to avoid step injection
+    mahony->err_lpf_x = mahony->err_lpf_x * (1.0f - mahony->err_lpf_alpha) + ex * mahony->err_lpf_alpha;
+    mahony->err_lpf_y = mahony->err_lpf_y * (1.0f - mahony->err_lpf_alpha) + ey * mahony->err_lpf_alpha;
+    mahony->err_lpf_z = mahony->err_lpf_z * (1.0f - mahony->err_lpf_alpha) + ez * mahony->err_lpf_alpha;
+    float ex_f = mahony->err_lpf_x;
+    float ey_f = mahony->err_lpf_y;
+    float ez_f = mahony->err_lpf_z;
+
+    // accel trust (0..1) using LPF'ed magnitude
+    float accel_err = fabsf(anorm - 1.0f);
     float accel_trust = clamp_f(1.0f - accel_err / mahony->accel_reject_thresh, 0.0f, 1.0f);
 
+    // gyro norms & derivatives
     float gyro_norm = sqrtf(gx*gx + gy*gy + gz*gz);
     float gyro_dot = (gyro_norm - mahony->last_gyro_norm) / dt;
-
-    // sensitive triggers for boost (both drop and rapid change)
     float gyro_drop = mahony->last_gyro_norm - gyro_norm;
-    if(gyro_drop > mahony->gyro_drop_trigger || fabsf(gyro_dot) > mahony->gyro_dot_trigger) {
-        mahony->boost_timer = mahony->boost_duration;
-    }
+
+    // Determine allow_boost only on deceleration (avoid boost on sudden start)
+    int allow_boost = 0;
+    if (gyro_drop > mahony->gyro_drop_trigger) allow_boost = 1;
+    if (fabsf(gyro_dot) > mahony->gyro_dot_trigger && gyro_dot < 0.0f) allow_boost = 1;
+
     mahony->last_gyro_norm = gyro_norm;
 
-    if(mahony->boost_timer > 0.0f) {
+    if (allow_boost) {
+        mahony->boost_timer = mahony->boost_duration;
+    }
+    if (mahony->boost_timer > 0.0f) {
         mahony->boost_timer -= dt;
-        if(mahony->boost_timer < 0.0f) mahony->boost_timer = 0.0f;
+        if (mahony->boost_timer < 0.0f) mahony->boost_timer = 0.0f;
     }
 
-    // centripetal detection: high omega + significant accel error -> reduce trust strongly
-    if(gyro_norm > mahony->centripetal_omega_thresh && accel_err > (mahony->accel_reject_thresh * 0.5f)) {
+    // centripetal detection: reduce accel trust strongly when likely centripetal accel present
+    if (gyro_norm > mahony->centripetal_omega_thresh && accel_err > (mahony->accel_reject_thresh * 0.5f)) {
         accel_trust *= mahony->centripetal_trust;
     }
 
-    // compute Kp_eff (aggressive)
-    float Kp_eff;
-    if(accel_trust < 0.12f) {
-        Kp_eff = mahony->Kp * 0.08f;
+    // compute base Kp_target (using accel_trust & boost condition)
+    float Kp_target;
+    if (accel_trust < 0.12f) {
+        Kp_target = mahony->Kp * 0.06f;
+        // quickly clear integral if accel not trusted
         mahony->integralFB[0]=mahony->integralFB[1]=mahony->integralFB[2]=0.0f;
     } else {
-        if(mahony->boost_timer > 0.0f || gyro_norm <= mahony->gyro_boost_thresh) {
-            Kp_eff = mahony->Kp_max * accel_trust;
+        if (mahony->boost_timer > 0.0f || gyro_norm <= mahony->gyro_boost_thresh) {
+            Kp_target = mahony->Kp_max * accel_trust;
         } else {
             float t = 1.0f - clamp_f(gyro_norm / (mahony->gyro_boost_thresh * 3.0f), 0.0f, 1.0f);
             float base = mahony->Kp + (mahony->Kp_max - mahony->Kp) * t;
-            Kp_eff = base * accel_trust;
+            Kp_target = base * accel_trust;
         }
     }
 
-    // fast settle: if very low angular rate and accel trusted, apply an extra short multiplier
-    if(gyro_norm < 0.20f && accel_trust > 0.7f) {
-        mahony->fast_settle_timer = mahony->fast_settle_duration;
+    // compute smooth boost_scale (0..1) based on boost_timer (quadratic/exponential shape)
+    float boost_scale = 0.0f;
+    if (mahony->boost_timer > 0.0f && mahony->boost_duration > 1e-6f) {
+        float bs = mahony->boost_timer / mahony->boost_duration; // decreases with time
+        bs = clamp_f(bs, 0.0f, 1.0f);
+        // transform shape: quadratic for smoother tail
+        boost_scale = powf(bs, mahony->boost_shape_power);
     }
-    if(mahony->fast_settle_timer > 0.0f) {
+
+    // combine into boosted Kp target smoothly (not abrupt)
+    float Kp_boosted = Kp_target + (mahony->Kp_max - Kp_target) * boost_scale * accel_trust;
+
+    // ramp Kp_state towards Kp_boosted to avoid step jumps
+    float ramp_alpha = dt / mahony->kp_ramp_time;
+    if (ramp_alpha > 1.0f) ramp_alpha = 1.0f;
+    mahony->kp_state += (Kp_boosted - mahony->kp_state) * ramp_alpha;
+    float Kp_eff = mahony->kp_state;
+
+    // fast settle: small temporary multiplier if nearly stopped and accel trusted
+    if (gyro_norm < 0.20f && accel_trust > 0.75f) mahony->fast_settle_timer = mahony->fast_settle_duration;
+    if (mahony->fast_settle_timer > 0.0f) {
         mahony->fast_settle_timer -= dt;
-        // temporary very strong Kp multiplier
-        Kp_eff *= 2.2f;
+        // mild multiplier to speed final settling without overshoot
+        Kp_eff *= 1.45f;
     }
 
-    // dynamic Ki: disable in high dynamic or low trust
+    // dynamic Ki_eff (disable in high dynamic or low trust)
     float Ki_eff = mahony->Ki;
-    if(accel_trust < 0.30f || gyro_norm > (mahony->centripetal_omega_thresh * 1.2f)) Ki_eff = 0.0f;
+    if (accel_trust < 0.30f || gyro_norm > (mahony->centripetal_omega_thresh * 1.2f)) Ki_eff = 0.0f;
 
-    if(Ki_eff > 0.0f) {
-        mahony->integralFB[0] = clamp_f(mahony->integralFB[0] + Ki_eff * ex * dt, -mahony->integral_limit, mahony->integral_limit);
-        mahony->integralFB[1] = clamp_f(mahony->integralFB[1] + Ki_eff * ey * dt, -mahony->integral_limit, mahony->integral_limit);
-        mahony->integralFB[2] = clamp_f(mahony->integralFB[2] + Ki_eff * ez * dt, -mahony->integral_limit, mahony->integral_limit);
+    // integrate error (use filtered error ex_f) with anti-windup and integral scaling during boost
+    // scale down integral while boost active to avoid step-like behavior from accumulated integral
+    float integral_scale = 1.0f - 0.9f * boost_scale;
+    if (integral_scale < 0.05f) integral_scale = 0.05f;
+
+    if (Ki_eff > 0.0f) {
+        mahony->integralFB[0] = clamp_f(mahony->integralFB[0] + Ki_eff * ex_f * dt * integral_scale, -mahony->integral_limit, mahony->integral_limit);
+        mahony->integralFB[1] = clamp_f(mahony->integralFB[1] + Ki_eff * ey_f * dt * integral_scale, -mahony->integral_limit, mahony->integral_limit);
+        mahony->integralFB[2] = clamp_f(mahony->integralFB[2] + Ki_eff * ez_f * dt * integral_scale, -mahony->integral_limit, mahony->integral_limit);
         gx += mahony->integralFB[0];
         gy += mahony->integralFB[1];
         gz += mahony->integralFB[2];
     }
 
-    gx += Kp_eff * ex;
-    gy += Kp_eff * ey;
-    gz += Kp_eff * ez;
+    // derivative of filtered error (edot) and LPF it
+    float edot_x = (ex_f - mahony->last_ex) / dt;
+    float edot_y = (ey_f - mahony->last_ey) / dt;
+    float edot_z = (ez_f - mahony->last_ez) / dt;
 
+    mahony->edot_lpf_x = mahony->edot_lpf_x * (1.0f - mahony->edot_lpf_alpha) + edot_x * mahony->edot_lpf_alpha;
+    mahony->edot_lpf_y = mahony->edot_lpf_y * (1.0f - mahony->edot_lpf_alpha) + edot_y * mahony->edot_lpf_alpha;
+    mahony->edot_lpf_z = mahony->edot_lpf_z * (1.0f - mahony->edot_lpf_alpha) + edot_z * mahony->edot_lpf_alpha;
+
+    // apply P and damped D corrections using filtered error & edot
+    gx += Kp_eff * ex_f - mahony->Kd * mahony->edot_lpf_x;
+    gy += Kp_eff * ey_f - mahony->Kd * mahony->edot_lpf_y;
+    gz += Kp_eff * ez_f - mahony->Kd * mahony->edot_lpf_z;
+
+    // quaternion integration (gx,gy,gz are in rad/s)
     float qDot0 = 0.5f * (-q1*gx - q2*gy - q3*gz);
     float qDot1 = 0.5f * (q0*gx + q2*gz - q3*gy);
     float qDot2 = 0.5f * (q0*gy - q1*gz + q3*gx);
@@ -170,15 +277,18 @@ static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const f
 
     q0 += qDot0 * dt; q1 += qDot1 * dt; q2 += qDot2 * dt; q3 += qDot3 * dt;
     float qnorm = sqrtf(q0*q0 + q1*q1 + q2*q2 + q3*q3);
-    if(qnorm > 1e-9f) { q0/=qnorm; q1/=qnorm; q2/=qnorm; q3/=qnorm; }
+    if (qnorm > 1e-9f) { q0/=qnorm; q1/=qnorm; q2/=qnorm; q3/=qnorm; }
 
     mahony->q[0]=q0; mahony->q[1]=q1; mahony->q[2]=q2; mahony->q[3]=q3;
 
+    // store last filtered errors
+    mahony->last_ex = ex_f; mahony->last_ey = ey_f; mahony->last_ez = ez_f;
+
+    // outputs in radians
     mahony->roll  = atan2f(2.0f*(q0*q1 + q2*q3), 1.0f - 2.0f*(q1*q1 + q2*q2));
     mahony->pitch = asinf(clamp_f(-2.0f*(q1*q3 - q0*q2), -1.0f, 1.0f));
     mahony->yaw   = atan2f(2.0f*(q0*q3 + q1*q2), 1.0f - 2.0f*(q2*q2 + q3*q3));
 }
-
 
 
 /**
