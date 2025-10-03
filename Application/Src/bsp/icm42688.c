@@ -1,9 +1,79 @@
 #include <icm42688.h>
 
-#include <Fusion.h>
+//#include <Fusion.h>
+#include <math.h>
+#include <string.h>
 
 #define ICM_CLK_GEN_TIM (&htim1)
 #define ICM_USE_SPI     (&hspi2)
+
+#ifndef DEG2RAD
+#define DEG2RAD (3.14159265358979323846f / 180.0f)
+#endif
+
+typedef struct {
+    float q[4];      // 四元数 [w, x, y, z]
+    float integralFB[3]; // 积分反馈
+    float Kp;
+    float Ki;
+    float roll;            // rad
+    float pitch;           // rad
+    float yaw;             // rad
+} MahonyAHRS;
+MahonyAHRS ahrs;
+
+static inline void Mahony_Init(MahonyAHRS *mahony, float Kp, float Ki) {
+    mahony->q[0] = 1.0f; mahony->q[1] = 0.0f; mahony->q[2] = 0.0f; mahony->q[3] = 0.0f;
+    memset(mahony->integralFB, 0, sizeof(float)*3);
+    mahony->Kp = Kp;
+    mahony->Ki = Ki;
+}
+
+static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const float gyro[3], float dt){
+    float ax = acc[0], ay = acc[1], az = acc[2];
+    float gx = gyro[0], gy = gyro[1], gz = gyro[2];
+    float q0=mahony->q[0], q1=mahony->q[1], q2=mahony->q[2], q3=mahony->q[3];
+
+    float norm = sqrtf(ax*ax + ay*ay + az*az);
+    if(norm < 1e-6f) return;
+    ax/=norm; ay/=norm; az/=norm;
+
+    float vx = 2.0f*(q1*q3 - q0*q2);
+    float vy = 2.0f*(q0*q1 + q2*q3);
+    float vz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
+
+    float ex = (ay*vz - az*vy);
+    float ey = (az*vx - ax*vz);
+    float ez = (ax*vy - ay*vx);
+
+    if(mahony->Ki>0.0f){
+        mahony->integralFB[0]+=mahony->Ki*ex*dt;
+        mahony->integralFB[1]+=mahony->Ki*ey*dt;
+        mahony->integralFB[2]+=mahony->Ki*ez*dt;
+        gx += mahony->integralFB[0];
+        gy += mahony->integralFB[1];
+        gz += mahony->integralFB[2];
+    }
+
+    gx += mahony->Kp*ex;
+    gy += mahony->Kp*ey;
+    gz += mahony->Kp*ez;
+
+    float qDot0 = 0.5f*(-q1*gx - q2*gy - q3*gz);
+    float qDot1 = 0.5f*(q0*gx + q2*gz - q3*gy);
+    float qDot2 = 0.5f*(q0*gy - q1*gz + q3*gx);
+    float qDot3 = 0.5f*(q0*gz + q1*gy - q2*gx);
+
+    q0 += qDot0*dt; q1 += qDot1*dt; q2 += qDot2*dt; q3 += qDot3*dt;
+    norm = sqrtf(q0*q0 + q1*q1 + q2*q2 + q3*q3);
+    q0/=norm; q1/=norm; q2/=norm; q3/=norm;
+
+    mahony->q[0]=q0; mahony->q[1]=q1; mahony->q[2]=q2; mahony->q[3]=q3;
+
+    mahony->roll  = atan2f(2.0f*(q0*q1 + q2*q3), 1.0f-2.0f*(q1*q1+q2*q2));
+    mahony->pitch = asinf(-2.0f*(q1*q3 - q0*q2));
+    mahony->yaw   = atan2f(2.0f*(q0*q3 + q1*q2), 1.0f-2.0f*(q2*q2+q3*q3));
+}
 
 /**
  * @brief 读取ICM-42688-P单个寄存器
@@ -127,18 +197,18 @@ typedef enum {
 } icm42688_accel_odr_t;
 
 
-FusionAhrs ahrs;
-
 /**
  * @brief ICM-42688-P初始化函数
  * @return 0成功，-1失败
  */
-
 int icm_init(){
     HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
 
+    // init mahony
+    Mahony_Init(&ahrs, 2.0f, 0.1f);
+
     HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, SET);
-    FusionAhrsInitialise(&ahrs);
+    //FusionAhrsInitialise(&ahrs);
     HAL_Delay(10); // 等待电源稳定
 
     // 1. 检查设备ID
@@ -152,42 +222,141 @@ int icm_init(){
     }
 
     // 2. 软件复位（可选，确保设备处于已知状态）
-    if(icm_write_byte(0x11, 0x01) != 0) { // DEVICE_CONFIG寄存器，SOFT_RESET_CONFIG位
+    if(icm_write_byte(ICM42688_DEVICE_CONFIG, 0x01) != 0) { // DEVICE_CONFIG寄存器，SOFT_RESET_CONFIG位
         return -1;
     }
     HAL_Delay(5); // 等待复位完成
 
-    // 3. 配置加速度计 - 16kHz ODR, ±16g
-    uint8_t accel_config = (ICM42688_ACCEL_FS_SEL_16G << 5) | ICM42688_ACCEL_ODR_16KHZ;
+    // 3. 配置外部时钟输入 (40kHz)
+    // 切换到Bank 1配置CLKIN引脚功能
+    if(icm_set_bank(ICM42688_BANK_1) != 0) {
+        return -1;
+    }
+    
+    // 配置PIN9为CLKIN功能 (INT2/FSYNC/CLKIN引脚)
+    uint8_t intf_config5;
+    if(icm_read_byte(ICM42688_INTF_CONFIG5, &intf_config5) != 0) {
+        return -1;
+    }
+    intf_config5 &= ~ICM42688_INTF_CONFIG5_PIN9_FUNCTION_MASK; // 清除PIN9_FUNCTION位
+    intf_config5 |= (0x02 << 1);  // ICM42688_PIN9_FUNCTION_CLKIN 是 0x02, ICM42688_INTF_CONFIG5_PIN9_FUNCTION_POS 是 1
+    if(icm_write_byte(ICM42688_INTF_CONFIG5, intf_config5) != 0) {
+        return -1;
+    }
+
+    // 切换回Bank 0
+    if(icm_set_bank(ICM42688_BANK_0) != 0) {
+        return -1;
+    }
+
+    // 启用RTC模式使用外部时钟
+    uint8_t intf_config1;
+    if(icm_read_byte(ICM42688_INTF_CONFIG1, &intf_config1) != 0) {
+        return -1;
+    }
+    intf_config1 |= 0x04; // 设置RTC_MODE位为1
+    intf_config1 &= ~0x03; // CLKSEL设置为00 (使用内部RC振荡器，但RTC模式会使用外部时钟)
+    if(icm_write_byte(ICM42688_INTF_CONFIG1, intf_config1) != 0) {
+        return -1;
+    }
+
+    // 4. 配置加速度计 - 16kHz ODR, ±16g (实际ODR会按比例缩放为20kHz)
+    uint8_t accel_config = (0x00 << 5) | 0x02; // FSR=16g, ODR=16kHz
     if(icm_write_byte(ICM42688_ACCEL_CONFIG0, accel_config) != 0){
         return -1;
     }
 
-    // 4. 配置陀螺仪 - 16kHz ODR, ±2000dps
-    uint8_t gyro_config = (ICM42688_GYRO_FS_SEL_2000DPS << 5) | ICM42688_GYRO_ODR_16KHZ;
+    // 5. 配置陀螺仪 - 16kHz ODR, ±2000dps (实际ODR会按比例缩放为20kHz)
+    uint8_t gyro_config = (0x00 << 5) | 0x02; // FSR=2000dps, ODR=16kHz
     if(icm_write_byte(ICM42688_GYRO_CONFIG0, gyro_config) != 0){
         return -1;
     }
 
-    // 5. 配置电源模式 - 启用加速度计和陀螺仪（低噪声模式）
-    uint8_t pwr_mgmt0 = (ICM42688_PWR_MGMT0_GYRO_LN_MODE << 2) | ICM42688_PWR_MGMT0_ACCEL_LN_MODE;
+    // 6. 启用抗混叠滤波器
+    // 切换到Bank 1配置陀螺仪抗混叠滤波器
+    if(icm_set_bank(ICM42688_BANK_1) != 0) {
+        return -1;
+    }
+    
+    // 启用陀螺仪抗混叠滤波器
+    uint8_t gyro_config_static2;
+    if(icm_read_byte(ICM42688_BANK1_GYRO_CONFIG_STATIC2, &gyro_config_static2) != 0) {
+        return -1;
+    }
+    gyro_config_static2 &= ~0x02; // 清除GYRO_AAF_DIS位 (0=启用抗混叠滤波器)
+    if(icm_write_byte(ICM42688_BANK1_GYRO_CONFIG_STATIC2, gyro_config_static2) != 0) {
+        return -1;
+    }
+
+    // 切换到Bank 2配置加速度计抗混叠滤波器
+    if(icm_set_bank(ICM42688_BANK_2) != 0) {
+        return -1;
+    }
+    
+    // 启用加速度计抗混叠滤波器
+    uint8_t accel_config_static2;
+    if(icm_read_byte(ICM42688_BANK2_ACCEL_CONFIG_STATIC2, &accel_config_static2) != 0) {
+        return -1;
+    }
+    accel_config_static2 &= ~0x01; // 清除ACCEL_AAF_DIS位 (0=启用抗混叠滤波器)
+    if(icm_write_byte(ICM42688_BANK2_ACCEL_CONFIG_STATIC2, accel_config_static2) != 0) {
+        return -1;
+    }
+
+    // 切换回Bank 0
+    if(icm_set_bank(ICM42688_BANK_0) != 0) {
+        return -1;
+    }
+    
+    // --- Step 7: Enable accel + gyro in LN mode ---
+    uint8_t pwr_mgmt0 = (0x03 << 2) | 0x03; // Gyro LN + Accel LN
     if(icm_write_byte(ICM42688_PWR_MGMT0, pwr_mgmt0) != 0){
         return -1;
     }
+    HAL_Delay(10); // wait sensors startup
 
-    // 6. 配置滤波器（可选）- 根据IMU解算需求调整
-    // 设置UI滤波器带宽以获得更好的性能
-    // Bank 0, Register 0x52 - GYRO_ACCEL_CONFIG0
-    uint8_t filter_config = 0x11; // 默认值，可根据需要调整
-    if(icm_write_byte(0x52, filter_config) != 0){
+    // --- Step 8: Configure INT1 pin (active high, push-pull, pulse) ---
+    uint8_t int_config = 0;
+    int_config |= (1 << 0); // INT1_POLARITY = 1 (active high)
+    int_config |= (1 << 1); // INT1_DRIVE_CIRCUIT = 1 (push-pull)
+    int_config |= (0 << 2); // INT1_MODE = 0 (pulse, not latched)
+    if(icm_write_byte(ICM42688_INT_CONFIG, int_config) != 0) {
         return -1;
     }
 
-    // 7. 等待传感器稳定
-    HAL_Delay(50);
+    // --- 关键：配置INT_CONFIG1寄存器 ---
+    // 清除INT_ASYNC_RESET位以确保INT1正常工作
+    uint8_t int_config1;
+    if(icm_read_byte(ICM42688_INT_CONFIG1, &int_config1) != 0) {
+        return -1;
+    }
+    int_config1 &= ~0x10; // 清除bit 4 (INT_ASYNC_RESET)
+    // 设置适当的中断脉冲持续时间
+    int_config1 |= (0 << 6); // INT_TPULSE_DURATION = 0 (100µs脉冲)
+    int_config1 |= (0 << 5); // INT_TDEASSERT_DISABLE = 0 (启用去断言)
+    if(icm_write_byte(ICM42688_INT_CONFIG1, int_config1) != 0) {
+        return -1;
+    }
+
+    // --- Step 9: Enable Data Ready interrupt on INT1 ---
+    // write exact value instead of OR to avoid junk bits
+    //uint8_t int_source0 = 0x08; // UI_DRDY_INT1_EN = bit3
+    uint8_t int_source0 = 0x18;
+    if(icm_write_byte(ICM42688_INT_SOURCE0, int_source0) != 0) {
+        return -1;
+    }
+
+    // --- Step 10: Clear any pending interrupts by reading INT_STATUS ---
+    uint8_t dummy=0;
+    icm_read_byte(ICM42688_INT_STATUS, &dummy);
+
+    HAL_TIM_Base_Start_IT(&htim6);// BUG: INT1 does not work. Use TIM6 interruption for now...
+
+    HAL_Delay(10);
 
     return 0;
 }
+
 
 /**
  * @brief 批量读取所有传感器数据并转换为物理单位（高效方式）
@@ -239,24 +408,40 @@ int icm_read_all_data(float accel_data[3], float gyro_data[3], float *temperatur
     // 温度转换
     *temperature = (temp_raw / 132.48f) + 25.0f; // °C
     
+    // --- 重要：清除数据就绪中断标志 ---
+    // 读取INT_STATUS寄存器会自动清除DATA_RDY_INT标志位
+    uint8_t int_status;
+    icm_read_byte(ICM42688_INT_STATUS, &int_status);
+    
     return 0;
 }
 
+// --- AHRS update ---
+int imu_update_ahrs(imu_data_t* imu, float SAMPLE_PERIOD){
+    imu_data_t imu_old = *imu;
 
+    if(icm_read_all_data(imu->acc, imu->gyro, &imu->tempreture)!=0) return -1;
 
-int imu_update_ahrs(imu_data_t* imu, const float SAMPLE_PERIOD){
+    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
 
-    icm_read_all_data(imu->acc,imu->gyro,&imu->tempreture);
+    const float alpha=1.0f;
+    for(int i=0;i<3;i++){
+        imu->acc[i] = imu->acc[i]*alpha + imu_old.acc[i]*(1.0f-alpha);
+        imu->gyro[i] = imu->gyro[i]*alpha + imu_old.gyro[i]*(1.0f-alpha);
+    }
 
-    const FusionVector gyroscope = {imu->gyro[0], imu->gyro[1], imu->gyro[2]};
-    const FusionVector accelerometer = {imu->acc[0], imu->acc[1], imu->acc[2],};
+    float gyro_rad[3];
+    gyro_rad[0]=imu->gyro[0]*DEG2RAD;
+    gyro_rad[1]=imu->gyro[1]*DEG2RAD;
+    gyro_rad[2]=imu->gyro[2]*DEG2RAD;
 
-    FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, SAMPLE_PERIOD/10);
+    Mahony_Update(&ahrs, imu->acc, gyro_rad, SAMPLE_PERIOD);
 
-    const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+    imu->yaw = ahrs.yaw;
+    imu->pitch = ahrs.pitch;
+    imu->roll = ahrs.roll;
 
-    imu->yaw=euler.angle.yaw;
-    imu->pitch=euler.angle.pitch;
-    imu->roll=euler.angle.roll;
+    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
 
+    return 0;
 }

@@ -22,9 +22,9 @@ void robot_init(){
 }
 
 void robot_step(const float CTRL_DELTA_T){
-    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
+    //HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
 
-    imu_update_ahrs(&imu, CTRL_DELTA_T);
+    // imu_update_ahrs(&imu, CTRL_DELTA_T);
 
     vofa.val[0]=imu.gyro[0];
     vofa.val[1]=imu.gyro[1];
@@ -40,7 +40,7 @@ void robot_step(const float CTRL_DELTA_T){
     controller_cycle(CTRL_DELTA_T);
 
     HAL_UART_Transmit_IT(&huart7, (void *)&(vofa), sizeof(vofa));
-    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
+    //HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
 }
 
 void robot_loop(){
