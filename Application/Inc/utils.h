@@ -1,6 +1,23 @@
 #ifndef __UTILS_H
 #define __UTILS_H
 
+
+// -----------------------------------------------------------
+/** What the below macros are used for:
+ * In STM32, there are memory areas called DTCM and ITCM. DTCM nice, as it provides same-cycle
+ * data memory access, make your program fast...
+ * 
+ * The problem is, DTCM is not reachable for DMAs (it can only be access by CPU). So we need to
+ * put all DMA-related variables and buffers in other area, such as RMA_D2.
+ * 
+ * Read the linker script FIRST!
+ * Note: RAM_D2 sections may be NOLOAD, which is not initialized after power-on.
+*/
+#define RAM_D2_SECTION   __attribute__((section(".RAM_D2")))
+#define DTCM_SECTION     __attribute__((section(".DTCMRAM")))
+#define RAM_D1_SECTION   __attribute__((section(".RAM")))
+// -----------------------------------------------------------
+
 typedef struct PID_t{
     const float P;
     const float I;

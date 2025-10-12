@@ -73,14 +73,13 @@ FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 1024K
 SECTIONS
 {
   /* The startup code goes first into FLASH */
-  .isr_vector :
-  {
-    . = ALIGN(4);
-    KEEP(*(.isr_vector)) /* Startup code */
-    . = ALIGN(4);
-  } >FLASH
-
-  /* The program code and other data goes into FLASH */
+.isr_vector :
+{
+. = ALIGN(8);
+KEEP(*(.isr_vector)) /* Startup code */
+. = ALIGN(8);
+} >FLASH
+/* The program code and other data goes into FLASH */
   .text :
   {
     . = ALIGN(4);
@@ -196,7 +195,15 @@ SECTIONS
     . = ALIGN(8);
   } >DTCMRAM
 
-
+  /* DMA buffers in RAM_D2 (DMA-accessible) */
+.RAM_D2 (NOLOAD) :
+{
+    . = ALIGN(4);
+    __ram_d2_start__ = .;   /* 可选全局符号，调试用 */
+    *(.RAM_D2)              /* 放置所有 __attribute__((section(".RAM_D2"))) 的变量 */
+    . = ALIGN(4);
+    __ram_d2_end__ = .;     /* 可选 */
+} > RAM_D2
 
   /* Remove information from the standard libraries */
   /DISCARD/ :

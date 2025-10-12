@@ -42,6 +42,9 @@
         // BASE + AIMING_BENCH configuration
         typedef struct robot_motors_t{
             report_M3508_t wheel_LF;
+            report_M3508_t wheel_LB;
+            report_M3508_t wheel_RF;
+            report_M3508_t wheel_RB;
 
         }robot_motors_t;
 
@@ -50,6 +53,5 @@
         }robot_ctrl_t;
     #endif
 #endif
-
 
 #endif

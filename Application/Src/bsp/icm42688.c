@@ -1,6 +1,7 @@
 #include <icm42688.h>
 
 #include <utils.h>
+#include <global_variables.h>
 
 //#include <Fusion.h>
 #include <math.h>
@@ -292,7 +293,6 @@ static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const f
     mahony->yaw   = atan2f(2.0f*(q0*q3 + q1*q2), 1.0f - 2.0f*(q2*q2 + q3*q3));
 }
 
-
 /**
  * @brief 读取ICM-42688-P单个寄存器
  * @param addr: 寄存器地址
@@ -345,6 +345,29 @@ int icm_write_byte(uint8_t addr, uint8_t data){
 int icm_set_bank(uint8_t bank){
     if(bank > 4) return -1;
     return icm_write_byte(ICM42688_REG_BANK_SEL, bank & 0x07);
+}
+
+/**
+ * @brief 尝试唤醒 ICM42688
+ * @return 0=成功, -1=失败
+ */
+int icm_wakeup(void)
+{
+    // 拉低CS片选，确保SPI处于活动状态
+    HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
+    HAL_Delay(1);
+
+    // 先尝试写入 PWR_MGMT0，唤醒IMU
+    uint8_t wake_cmd = 0x0F;  // Gyro LN + Accel LN
+    if (icm_write_byte(ICM42688_PWR_MGMT0, wake_cmd) != 0)
+        return -1;
+
+    // 延时几毫秒让内部时钟稳定
+    HAL_Delay(5);
+
+    return 0;
 }
 
 
@@ -422,13 +445,24 @@ typedef enum {
 int icm_init(){
     HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
 
+    HAL_Delay(5); // 等待电源稳定
+
+    // 拉低CS片选，确保SPI处于活动状态
+    HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
+    HAL_Delay(1);
+
+    // 先尝试写入 PWR_MGMT0，唤醒IMU
+    uint8_t wake_cmd = 0x0F;  // Gyro LN + Accel LN
+    if (icm_write_byte(ICM42688_PWR_MGMT0, wake_cmd) != 0)
+        return -1;
+
     // init mahony
     Mahony_Init(&ahrs, 2.0f, 0.1f);
 
     HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, SET);
-    //FusionAhrsInitialise(&ahrs);
-    HAL_Delay(10); // 等待电源稳定
-
+    
     // 1. 检查设备ID
     uint8_t who_am_i;
     if(icm_read_byte(ICM42688_WHO_AM_I, &who_am_i) != 0){
@@ -568,9 +602,9 @@ int icm_init(){
     uint8_t dummy=0;
     icm_read_byte(ICM42688_INT_STATUS, &dummy);
 
-    HAL_TIM_Base_Start_IT(&htim6);// BUG: INT1 does not work. Use TIM6 interruption for now...
-
     HAL_Delay(10);
+
+    imu_state = IMU_RUNNING;
 
     return 0;
 }
@@ -634,13 +668,123 @@ int icm_read_all_data(float accel_data[3], float gyro_data[3]){
     return 0;
 }
 
+#define ICM_REG_ACCEL_XOUT_H   0x1F
+#define ICM_SPI_TIMEOUT_MS     50
+#define ICM_READ_LEN           12
+
+#define ICM_DMA_TX_LEN         (1 + ICM_READ_LEN)
+#define ICM_DMA_RX_LEN         (1 + ICM_READ_LEN)
+
+RAM_D2_SECTION uint8_t icm_tx_buffer[20];
+RAM_D2_SECTION uint8_t icm_rx_buffer[20];
+volatile uint8_t icm_dma_done;
+
+/**
+ * @brief SPI DMA完成回调
+ */
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi->Instance == SPI2) {
+        icm_dma_done = 1;
+    }
+}
+
+/**
+ * @brief 启动一次ICM DMA读取（非阻塞）
+ */
+static int icm_read_all_data_dma_begin(void)
+{
+    icm_tx_buffer[0] = ICM_REG_ACCEL_XOUT_H | 0x80u; // 读位=1
+    memset(&icm_tx_buffer[1], 0x00, ICM_READ_LEN);   // dummy bytes
+
+    icm_dma_done = 0; // 清除完成标志
+
+    HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_RESET);
+
+    HAL_StatusTypeDef ret = HAL_SPI_TransmitReceive_DMA(
+        ICM_USE_SPI,
+        icm_tx_buffer,
+        icm_rx_buffer,
+        ICM_DMA_TX_LEN
+    );
+
+    if (ret != HAL_OK) {
+        HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
+        return -1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 同步方式读取ICM42688加速度与陀螺仪数据（DMA + 等待完成）
+ * @param accel_data: 加速度 [3], 单位 g
+ * @param gyro_data:  陀螺仪 [3], 单位 deg/s
+ * @return 0 成功, -1 失败或超时
+ */
+int icm_read_all_data_dma(float accel_data[3], float gyro_data[3])
+{
+    if (icm_read_all_data_dma_begin() != 0)
+        return -1;
+
+    uint32_t tickstart = HAL_GetTick();
+
+    // 等待DMA完成
+    while (!icm_dma_done) {
+        if ((HAL_GetTick() - tickstart) > 100) {
+            // 超时：终止传输
+            HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
+            HAL_SPI_DMAStop(ICM_USE_SPI);
+            return -1;
+        }
+    }
+
+    // DMA传输完成后释放CS
+    HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
+
+    // 拷贝寄存器数据（跳过第一个dummy字节）
+    uint8_t *buffer = &icm_rx_buffer[1];
+
+    // --- 解析原始数据 ---
+    int16_t accel_raw[3];
+    int16_t gyro_raw[3];
+
+    accel_raw[0] = (int16_t)((buffer[0] << 8) | buffer[1]);
+    accel_raw[1] = (int16_t)((buffer[2] << 8) | buffer[3]);
+    accel_raw[2] = (int16_t)((buffer[4] << 8) | buffer[5]);
+
+    gyro_raw[0] = (int16_t)((buffer[6] << 8) | buffer[7]);
+    gyro_raw[1] = (int16_t)((buffer[8] << 8) | buffer[9]);
+    gyro_raw[2] = (int16_t)((buffer[10] << 8) | buffer[11]);
+
+    // --- 转换为物理单位 ---
+    const float accel_sensitivity = 2048.0f; // ±16g
+    const float gyro_sensitivity  = 16.4f;   // ±2000 dps
+
+    accel_data[0] = accel_raw[0] / accel_sensitivity;
+    accel_data[1] = accel_raw[1] / accel_sensitivity;
+    accel_data[2] = accel_raw[2] / accel_sensitivity;
+
+    gyro_data[0] = gyro_raw[0] / gyro_sensitivity;
+    gyro_data[1] = gyro_raw[1] / gyro_sensitivity;
+    gyro_data[2] = gyro_raw[2] / gyro_sensitivity;
+
+    return 0;
+}
+
+
+//============================ AHRS ===================================
 iir_filter_t iir[sizeof(imu_data_t)/4];
 
 // --- AHRS update ---
 int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD){
+    if(imu_state == IMU_RESET){
+        return -1;
+    }
     imu_data_t imu_old = *imu;
 
-    if(icm_read_all_data(imu->acc, imu->gyro)!=0) return -1;
+    //if(icm_read_all_data(imu->acc, imu->gyro)!=0) return -1;
+    if(icm_read_all_data_dma(imu->acc, imu->gyro)!=0) return -1;
 
     HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
 
@@ -664,8 +808,12 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     float* imu_f=(void *)imu;
     float* imu_clean_f=(void *)imu_clean;
 
-    // 二阶Butterworth滤波器 (fs=20kHz, fc=600Hz)
-    const float a[4] = {1.0f, -1.734725768809275f, 0.7660066009432638f, 0.0f};
+    // // 二阶Butterworth滤波器 (fs=20kHz, fc=400Hz)
+    // const float a[4] = {1.0f, -1.82269493f, 0.83718165f, 0.0f};
+    // const float b[4] = {0.00362168f, 0.00724336f, 0.00362168f, 0.0f};
+
+    // 二阶Butterworth滤波器 (fs=20kHz, fc=600Hz) 
+    const float a[4] = {1.0f, -1.734725768809275f, 0.7660066009432638f, 0.0f}; 
     const float b[4] = {0.007820208033497193f, 0.015640416066994386f, 0.007820208033497193f, 0.0f};
 
     for(int i=0;i<sizeof(imu_data_t)/4;i++){
@@ -677,7 +825,7 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     return 0;
 }
 
-imu_data_t imu, imu_clean;
+static imu_data_t imu, imu_clean;
 
 void imu_update(){
     imu_update_ahrs(&imu, &imu_clean, 1.0f/20e3f);

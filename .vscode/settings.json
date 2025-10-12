@@ -51,6 +51,7 @@
         "spi.h": "c",
         "icm42688.h": "c",
         "fusionahrs.h": "c",
-        "buzzer.h": "c"
+        "buzzer.h": "c",
+        "config.h": "c"
     }
 }
