@@ -724,23 +724,16 @@ static int icm_read_all_data_dma_begin(void)
  */
 int icm_read_all_data_dma(float accel_data[3], float gyro_data[3])
 {
-    if (icm_read_all_data_dma_begin() != 0)
-        return -1;
 
-    uint32_t tickstart = HAL_GetTick();
-
-    // 等待DMA完成
-    while (!icm_dma_done) {
-        if ((HAL_GetTick() - tickstart) > 100) {
-            // 超时：终止传输
-            HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
-            HAL_SPI_DMAStop(ICM_USE_SPI);
-            return -1;
-        }
+    if (icm_dma_done == 0) {
+        HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
+        // HAL_SPI_DMAStop(ICM_USE_SPI);
+        icm_read_all_data_dma_begin();
+        return -1; // unable to fetch data (due to not enabled/other bugs)
+    } else {
+        // DMA传输完成后释放CS
+        HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
     }
-
-    // DMA传输完成后释放CS
-    HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
 
     // 拷贝寄存器数据（跳过第一个dummy字节）
     uint8_t *buffer = &icm_rx_buffer[1];
@@ -769,6 +762,10 @@ int icm_read_all_data_dma(float accel_data[3], float gyro_data[3])
     gyro_data[1] = gyro_raw[1] / gyro_sensitivity;
     gyro_data[2] = gyro_raw[2] / gyro_sensitivity;
 
+    // Call dma read at the end start reading at background
+    if (icm_read_all_data_dma_begin() != 0)
+        return -1;
+
     return 0;
 }
 
@@ -786,8 +783,7 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     //if(icm_read_all_data(imu->acc, imu->gyro)!=0) return -1;
     if(icm_read_all_data_dma(imu->acc, imu->gyro)!=0) return -1;
 
-    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
-
+    // 20% interrupt total
     const float alpha=1.0f;
     for(int i=0;i<3;i++){
         imu->acc[i] = imu->acc[i]*alpha + imu_old.acc[i]*(1.0f-alpha);
@@ -799,6 +795,7 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     gyro_rad[1]=imu->gyro[1]*DEG2RAD;
     gyro_rad[2]=imu->gyro[2]*DEG2RAD;
 
+    // 13% interrupt
     Mahony_Update(&ahrs, imu->acc, gyro_rad, SAMPLE_PERIOD);
 
     imu->yaw = ahrs.yaw;
@@ -816,11 +813,10 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     const float a[4] = {1.0f, -1.734725768809275f, 0.7660066009432638f, 0.0f}; 
     const float b[4] = {0.007820208033497193f, 0.015640416066994386f, 0.007820208033497193f, 0.0f};
 
+    // %5 interrupt time
     for(int i=0;i<sizeof(imu_data_t)/4;i++){
         imu_clean_f[i]=filter_iir_eval(&iir[i], imu_f[i], 2, a, b);
     }
-
-    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
 
     return 0;
 }
@@ -828,7 +824,12 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
 static imu_data_t imu, imu_clean;
 
 void imu_update(){
+    // HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
     imu_update_ahrs(&imu, &imu_clean, 1.0f/20e3f);
+    // HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
+    // 目前是读取和传输同时开启，这个过程需要改变，改成先在传输时候dma在读取，这样dma数据到了下一个传输可以直接传输
+    // 这两个操作得在20hz同一个cycle下执行，读取的dma数据会在下一个cycle出现
+    // 实现：先传输在继续开启读写
 }
 
 void imu_obtain_data(imu_data_t *data){
