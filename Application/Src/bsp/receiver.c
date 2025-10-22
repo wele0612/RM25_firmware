@@ -1,7 +1,10 @@
 #include <receiver.h>
+#include <stdint.h>
 
-void parse_DR16_receiver_msg(receiver_DBUS_t* dr16){
-    const uint8_t* buff = dr16->msg;
+
+
+void parse_DR16_receiver_msg(receiver_DBUS_t* dr16, uint8_t* msg){
+    const uint8_t* buff = msg;
     uint16_t ch0 = (buff[0] | buff[1] << 8) & 0x07FF;
     dr16->channel[0] = ((float)ch0-1024.0f)*(1/660.0f);
 

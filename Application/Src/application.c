@@ -7,11 +7,15 @@
 
 #include <robot_arch.h>
 robot_motors_t motors;
+robot_ctrl_t robot_geo;
 
 timeout_monitor_t timeout;
 
 #define DR16_UART &huart5
 receiver_DBUS_t dr16;
+
+// DMA buffer outside
+RAM_D2_SECTION uint8_t dr16_buffer_recv[32]; // 18 bytes total
 
 RAM_D2_SECTION robot_VOFA_report_t vofa = {.tail  = VOFA_TAIL};
 imu_data_t imu_data;
@@ -23,6 +27,7 @@ void robot_init(){
     // Must give IMU clock first, so that IMU does not go into sleep mode.
     HAL_TIM_Base_Start_IT(&htim6);// BUG: INT1 does not work. Use TIM6 interruption for now...
     can_bsp_init();
+    HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32);
 
     while(icm_init() != 0);
 
@@ -76,8 +81,13 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
             return;
         }
 
+        HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32); // 接收完毕后重启
+
         set_DR16_previous_state(&dr16);
-        parse_DR16_receiver_msg(&dr16);
+
+        // parse_DR16_receiver_msg(&dr16);
+        parse_DR16_receiver_msg(&dr16, dr16_buffer_recv);
+
         timeout.last_remote_tick=HAL_GetTick();
         //HAL_UART_Transmit_DMA(&huart1, (uint8_t *)dr16.msg, 18);
         dr16_on_change();
@@ -91,6 +101,8 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
     // }else if(huart == REFEREE_UART){
     //     referee_recv_byte(referee_buf[0]);
     //     HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
+
+
     }
 
 }
@@ -101,14 +113,15 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
     robot_UART_msgcallback(huart);
+    
 }
 
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
-	if(huart == DR16_UART)
-	{
-		__HAL_UNLOCK(huart);
-		HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, (uint8_t*)dr16.msg, 32);
-    }
-}
+// void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
+// 	if(huart == DR16_UART)
+// 	{
+// 		__HAL_UNLOCK(huart);
+// 		HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, (uint8_t*), 32);
+//     }
+// }
 
 

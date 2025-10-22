@@ -46,7 +46,6 @@ typedef struct receiver_DBUS_t{
     {
         uint16_t v;
     } key;
-    uint8_t msg[16]; // To prevent out-of-bound. Only 18 bytes used.
     struct{
             float channel[4];
         int8_t s1;
@@ -76,8 +75,8 @@ typedef struct Aiming_message_t{
     uint8_t msg[64];
 }Aiming_message_t;
 
-void parse_DR16_receiver_msg(receiver_DBUS_t* dr16);
-void set_DR16_previous_state(receiver_DBUS_t* dr16);
+void parse_DR16_receiver_msg(receiver_DBUS_t *dr16, uint8_t *msg);
+void set_DR16_previous_state(receiver_DBUS_t *dr16);
 
 void parse_aiming_receiver_msg(Aiming_message_t* aim);
 

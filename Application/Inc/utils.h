@@ -1,6 +1,8 @@
 #ifndef __UTILS_H
 #define __UTILS_H
 
+#define PI (3.1415926f)
+
 
 // -----------------------------------------------------------
 /** What the below macros are used for:
