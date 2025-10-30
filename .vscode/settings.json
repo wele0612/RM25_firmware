@@ -52,6 +52,7 @@
         "icm42688.h": "c",
         "fusionahrs.h": "c",
         "buzzer.h": "c",
-        "config.h": "c"
+        "config.h": "c",
+        "global_variables.h": "c"
     }
 }

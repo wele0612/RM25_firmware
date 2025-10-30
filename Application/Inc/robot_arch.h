@@ -49,7 +49,9 @@
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
-
+            float target_speed_x;
+            float target_speed_y;
+            float target_omega_yaw;
         }robot_ctrl_t;
     #endif
 #endif
