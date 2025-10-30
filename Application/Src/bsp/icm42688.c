@@ -786,8 +786,6 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     //if(icm_read_all_data(imu->acc, imu->gyro)!=0) return -1;
     if(icm_read_all_data_dma(imu->acc, imu->gyro)!=0) return -1;
 
-    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
-
     const float alpha=1.0f;
     for(int i=0;i<3;i++){
         imu->acc[i] = imu->acc[i]*alpha + imu_old.acc[i]*(1.0f-alpha);
@@ -820,15 +818,15 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
         imu_clean_f[i]=filter_iir_eval(&iir[i], imu_f[i], 2, a, b);
     }
 
-    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
-
     return 0;
 }
 
 static imu_data_t imu, imu_clean;
 
 void imu_update(){
+    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, SET);
     imu_update_ahrs(&imu, &imu_clean, 1.0f/20e3f);
+    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
 }
 
 void imu_obtain_data(imu_data_t *data){
