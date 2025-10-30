@@ -7,11 +7,11 @@
 #include<stdint.h>
 
 typedef struct imu_data_t{
-    float gyro[3];
-    float acc[3];
-    float yaw;
-    float pitch;
-    float roll;
+    float gyro[3]; // Deg/s {roll, pitch, yaw}
+    float acc[3]; // g
+    float yaw; // rad, within (-π, π)
+    float pitch; // rad
+    float roll; // rad
 }imu_data_t;
 
 

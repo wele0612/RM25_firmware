@@ -6,24 +6,21 @@
 #include <receiver.h>
 
 #include <robot_arch.h>
-robot_motors_t motors;
-robot_ctrl_t robot_geo;
+
+#define GENERATE_DECLARE_GLOBAL_VARS
+#include <global_variables.h>
+#undef GENERATE_DECLARE_GLOBAL_VARS
 
 timeout_monitor_t timeout;
-
-#define DR16_UART &huart5
-receiver_DBUS_t dr16;
 
 // DMA buffer outside
 RAM_D2_SECTION uint8_t dr16_buffer_recv[32]; // 18 bytes total
 
 RAM_D2_SECTION robot_VOFA_report_t vofa = {.tail  = VOFA_TAIL};
-imu_data_t imu_data;
-
-// ---- state machines ----
-IMU_state_t imu_state=IMU_RESET;
 
 void robot_init(){
+    imu_state=IMU_RESET;
+
     // Must give IMU clock first, so that IMU does not go into sleep mode.
     HAL_TIM_Base_Start_IT(&htim6);// BUG: INT1 does not work. Use TIM6 interruption for now...
     can_bsp_init();
