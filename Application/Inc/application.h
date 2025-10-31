@@ -11,20 +11,22 @@
 #include <octospi.h>
 
 #include <icm42688.h>
+#include <w25q.h>
 
 #include <utils.h>
 
 #define VOFA_TAIL {0x00, 0x00, 0x80, 0x7f}
 
-typedef struct robot_VOFA_report_t{
-    float val[10];
-    unsigned char tail[4];
-}robot_VOFA_report_t;
+#define ROBOT_CONFIG_ROM_ADDR (0x0)
 
-#define REMOTE_TIMEOUT (50U)
-typedef struct timeout_monitor_t{
-    uint64_t last_remote_tick;
-}timeout_monitor_t;
+#define robot_saveconfig(config) do{\
+    OSPI_W25Qxx_BlockErase_32K(ROBOT_CONFIG_ROM_ADDR);\
+    OSPI_W25Qxx_WriteBuffer((uint8_t*)(config), ROBOT_CONFIG_ROM_ADDR,sizeof(Robot_config_t));\
+}while(0)
+
+#define robot_readconfig(config) do{\
+    OSPI_W25Qxx_ReadBuffer((uint8_t*)(config),ROBOT_CONFIG_ROM_ADDR,sizeof(Robot_config_t));\
+}while(0)
 
 
 void robot_init();
@@ -49,17 +51,5 @@ void role_controller_step(const float CTRL_DELTA_T);
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg);
 void dr16_on_change();
-
-
-// -----------------------------------------------------
-// | State machines.                                   |
-// |                                                   |
-// -----------------------------------------------------
-
-typedef enum IMU_state{
-    IMU_RESET,
-    IMU_RUNNING,
-    IMU_CALIBRATE
-}IMU_state_t;
 
 #endif
