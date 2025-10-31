@@ -778,18 +778,18 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     if(imu_state == IMU_RESET){
         return -1;
     }
-    imu_data_t imu_old = *imu;
 
     //if(icm_read_all_data(imu->acc, imu->gyro)!=0) return -1;
     if(icm_read_all_data_dma(imu->acc, imu->gyro)!=0) return -1;
 
     // 20% interrupt total
-    const float alpha=1.0f;
-    for(int i=0;i<3;i++){
-        imu->acc[i] = imu->acc[i]*alpha + imu_old.acc[i]*(1.0f-alpha);
-        imu->gyro[i] = imu->gyro[i]*alpha + imu_old.gyro[i]*(1.0f-alpha);
-    }
 
+    // apply calibration
+
+    for(int i=0;i<3;i++){
+        imu->gyro[i] -= robot_config.imu_gyro_offset[i];
+    }
+    
     float gyro_rad[3];
     gyro_rad[0]=imu->gyro[0]*DEG2RAD;
     gyro_rad[1]=imu->gyro[1]*DEG2RAD;

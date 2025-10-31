@@ -7,7 +7,6 @@
 
 #include<h7can.h>
 
-
 #ifdef CONFIG_PLATFORM_BASE
 
 PID_t single_LF_wheel_velocity_pid={
@@ -70,15 +69,18 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_torque_M3508(tx_buffer,\
         lf_torque, lb_torque, rf_torque, rb_torque), 8);
 
-    vofa.val[0]=motors.wheel_LF.speed;
-    vofa.val[1]=target_rpm_lf;
-    vofa.val[2]=lf_torque;
-    vofa.val[3]=imu_data.pitch;
+    vofa.val[0]=imu_data.yaw;
+    vofa.val[1]=imu_data.pitch;
+    vofa.val[2]=imu_data.gyro[2];
+    vofa.val[3]=imu_data.gyro[1];
 
     vofa.val[4]=dr16.channel[0];
-    // vofa.val[5]=dr16.channel[1];
-    // vofa.val[6]=dr16.channel[2];
-    // vofa.val[7]=dr16.channel[3];
+    vofa.val[5]=dr16.channel[1];
+    vofa.val[6]=dr16.channel[2];
+    vofa.val[7]=dr16.channel[3];
+
+    vofa.val[8]=(float)robot_config.test_val;
+    vofa.val[9]=robot_config.imu_gyro_offset[2];
 
     // vofa.val[8]=(float)dr16.s1;
     // vofa.val[9]=(float)dr16.s2;

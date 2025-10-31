@@ -18,21 +18,71 @@ RAM_D2_SECTION uint8_t dr16_buffer_recv[32]; // 18 bytes total
 
 RAM_D2_SECTION robot_VOFA_report_t vofa = {.tail  = VOFA_TAIL};
 
+static int err=0;
+static void self_test(){
+    err = 0;
+    // Check IMU calibration data
+    const float imu_gyro_offset_max = 3.0f;
+    for(int i=0;i<3;i++){
+        if(isnan(robot_config.imu_gyro_offset[i]))  err=1;
+        if(fabs(robot_config.imu_gyro_offset[i])>imu_gyro_offset_max)   err=2;
+    }
+
+    while(err){
+        buzzer_calibration_startup();
+    }
+}
+
 void robot_init(){
     imu_state=IMU_RESET;
 
     // Must give IMU clock first, so that IMU does not go into sleep mode.
-    HAL_TIM_Base_Start_IT(&htim6);// BUG: INT1 does not work. Use TIM6 interruption for now...
+    HAL_TIM_Base_Start_IT(&htim6);// BUG: IMU_INT1 does not work. Use TIM6 interruption for now...
     can_bsp_init();
     HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32);
 
-    while(icm_init() != 0);
+    while(icm_init() != 0); //Init IMU
+    robot_readconfig(&robot_config); //Read from flash
+
+    // Hold User key during start up to enter IMU callibration mode.
+#define IMU_CALIBRATION_MODE_ENABLE
+#ifdef IMU_CALIBRATION_MODE_ENABLE
+    if(HAL_GPIO_ReadPin(USER_KEY_GPIO_Port, USER_KEY_Pin) == RESET){
+        HAL_Delay(10);
+        if(HAL_GPIO_ReadPin(USER_KEY_GPIO_Port, USER_KEY_Pin) == RESET){
+            buzzer_calibration_startup();
+            HAL_Delay(5000);
+
+            imu_state = IMU_CALIBRATE;
+
+            for(int i=0;i<3;i++){
+                robot_config.imu_gyro_offset[i]=0.0f;
+            }
+
+            HAL_Delay(10);
+
+            float gyro_offset[3]={0.0f,0.0f,0.0f};
+            const float calib_sample_nums=2000;
+            for(int i=0;i<calib_sample_nums;i++){
+                imu_obtain_data(&imu_data);
+                gyro_offset[0] += imu_data.gyro[0];
+                gyro_offset[1] += imu_data.gyro[1];
+                gyro_offset[2] += imu_data.gyro[2];
+            }
+            robot_config.test_val += 1;
+            robot_config.imu_gyro_offset[0] = gyro_offset[0]/calib_sample_nums;
+            robot_config.imu_gyro_offset[1] = gyro_offset[1]/calib_sample_nums;
+            robot_config.imu_gyro_offset[2] = gyro_offset[2]/calib_sample_nums;
+            robot_saveconfig(&robot_config);
+
+            imu_state = IMU_RUNNING;
+        }
+    }
+#endif
+
+    self_test();
 
     buzzer_DJI_startup();
-
-    // HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, (uint8_t*)dr16.msg, 32);
-    // __HAL_UART_ENABLE_IT(DR16_UART, UART_IT_IDLE);
-    // __HAL_DMA_DISABLE_IT(&huart5,DMA_IT_HT);
 
     timeout.last_remote_tick=HAL_GetTick();
     
