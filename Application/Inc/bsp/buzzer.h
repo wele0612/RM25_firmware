@@ -13,9 +13,20 @@ void buzzer_calibration_startup();
 void buzzer_calibration_done();
 void buzzer_motor_notconnected(int id);
 
-#define TUNE_A4 440.0f
+void why_play_harunokage();
+
+#define TUNE_C4            261.63f
+#define TUNE_C4_SHARP_D4_FLAT 277.18f
+#define TUNE_D4            293.66f
+#define TUNE_D4_SHARP_E4_FLAT 311.13f
+#define TUNE_E4            329.63f
+#define TUNE_F4            349.23f
+#define TUNE_F4_SHARP_G4_FLAT 369.99f
+#define TUNE_G4            392.00f
+#define TUNE_G4_SHARP_A4_FLAT 415.30f
+#define TUNE_A4            440.00f
 #define TUNE_A4_SHARP_B4_FLAT 466.16f
-#define TUNE_B4 493.88f
+#define TUNE_B4            493.88f
 #define TUNE_C5 523.25f
 #define TUNE_C5_SHARP_D5_FLAT 554.37f
 #define TUNE_D5 587.33f

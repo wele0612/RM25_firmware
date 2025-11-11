@@ -78,5 +78,23 @@ void buzzer_motor_notconnected(int id){
         buzzer_off();
         HAL_Delay(delay_ms*2);
     }
-    
+}
+
+#include<harunokage.inc>
+
+extern const float seq_freq[];
+extern const float seq_ms[];
+const int        seq_len = sizeof(seq_freq)/sizeof(seq_freq[0]);
+
+void why_play_harunokage(void){
+    for(int i=0;i<seq_len;i++){
+        if(seq_freq[i]==0.0f){
+            buzzer_off();
+        }else{
+            buzzer_set_freq(seq_freq[i]);
+            buzzer_on();
+        }
+        HAL_Delay((uint32_t)seq_ms[i]);
+    }
+    buzzer_off();
 }
