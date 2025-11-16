@@ -11,6 +11,7 @@
 #include <application.h>
 #include <receiver.h>
 #include <icm42688.h>
+#include <referee.h>
 
 
 typedef struct robot_VOFA_report_t{
@@ -37,6 +38,11 @@ __GLOBAL_VAR robot_ctrl_t robot_geo;
 __GLOBAL_VAR receiver_DBUS_t dr16;
 
 __GLOBAL_VAR imu_data_t imu_data;
+
+#define REFEREE_UART &huart1
+__GLOBAL_VAR Referee_info_t referee;
+__GLOBAL_VAR Referee_info_t referee_prev;
+__GLOBAL_VAR uint8_t referee_buf[8];
 
 // -----------------------------------------------------
 // | State machines.                                   |

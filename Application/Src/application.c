@@ -40,6 +40,7 @@ void robot_init(){
     HAL_TIM_Base_Start_IT(&htim6);// BUG: IMU_INT1 does not work. Use TIM6 interruption for now...
     can_bsp_init();
     HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32);
+    HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
 
     while(icm_init() != 0); //Init IMU
     robot_readconfig(&robot_config); //Read from flash
@@ -113,8 +114,8 @@ void robot_step(const float CTRL_DELTA_T){
 }
 
 void robot_loop(){
-    HAL_Delay(200);
-    
+    HAL_Delay(2000);
+    //why_play_harunokage();
 }
 
 void referee_uart_transmit_once(const uint8_t *send_buf, uint16_t size){
@@ -131,8 +132,6 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
         HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32); // 接收完毕后重启
 
         set_DR16_previous_state(&dr16);
-
-        // parse_DR16_receiver_msg(&dr16);
         parse_DR16_receiver_msg(&dr16, dr16_buffer_recv);
 
         timeout.last_remote_tick=HAL_GetTick();
@@ -145,10 +144,9 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
     //     }
     //     parse_aiming_receiver_msg(&aim);
 
-    // }else if(huart == REFEREE_UART){
-    //     referee_recv_byte(referee_buf[0]);
-    //     HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
-
+    }else if(huart == REFEREE_UART){
+        referee_recv_byte(referee_buf[0]);
+        HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
 
     }
 
