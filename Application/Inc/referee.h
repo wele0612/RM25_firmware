@@ -142,7 +142,8 @@ typedef struct __attribute__((packed)) {
 
         // Graphics commands
         struct {
-            uint8_t operation;  // For 0x0100 (delete layer)
+            uint8_t delete_type;   // 删除操作: 0-空操作, 1-删除图层, 2-删除所有
+            uint8_t layer;         // 图层数: 0~9
         } delete_layer;
         
         interaction_figure_t single_graphic[1];    // For 0x0101
@@ -255,9 +256,6 @@ void referee_recv_byte(const uint8_t data);
 
 uint8_t *referee_send_data(uint16_t data_size, robot_interaction_data_t *data);
 
-typedef void (*referee_transmit_fn_t)(const uint8_t *send_buf, uint16_t size);
-
-void referee_init(referee_transmit_fn_t transmit_fn);
 void referee_reset_ui();
 void referee_ui_next_frame();
 

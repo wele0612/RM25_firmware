@@ -30,6 +30,7 @@
 
 
 void robot_init();
+void referee_ui_update(int updata_level);
 void robot_step(const float CTRL_DELTA_T); // bind to interruption with fixed frequency.
 void robot_loop();
 
