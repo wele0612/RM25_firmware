@@ -2,7 +2,6 @@
 #include <stdint.h>
 
 
-
 void parse_DR16_receiver_msg(receiver_DBUS_t* dr16, uint8_t* msg){
     const uint8_t* buff = msg;
     uint16_t ch0 = (buff[0] | buff[1] << 8) & 0x07FF;
@@ -31,7 +30,7 @@ void parse_DR16_receiver_msg(receiver_DBUS_t* dr16, uint8_t* msg){
     dr16->mouse.z = ((int16_t)buff[10]) | ((int16_t)buff[11] << 8);
     dr16->mouse.press_l = buff[12];
     dr16->mouse.press_r = buff[13];
-    dr16->key.v = ((int16_t)buff[14]);// | ((int16_t)buff[15] << 8);
+    dr16->key.v = ((uint16_t)buff[14]) | ((uint16_t)buff[15] << 8);
 
 }
 
