@@ -69,9 +69,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_torque_M3508(tx_buffer,\
         lf_torque, lb_torque, rf_torque, rb_torque), 8);
 
-    vofa.val[0]=imu_data.yaw;
-    vofa.val[1]=imu_data.pitch;
-    vofa.val[2]=imu_data.gyro[2];
+    vofa.val[0]=imu_data.yaw / PI * 180;
+    vofa.val[1]=imu_data.pitch / PI * 180;
+    vofa.val[2]=imu_data.roll / PI * 180;
     vofa.val[3]=imu_data.gyro[1];
 
     vofa.val[4]=dr16.channel[0];
