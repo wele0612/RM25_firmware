@@ -2,8 +2,8 @@
 #define __CONFIG_H
 
 //========= Choose Platform ===========
-//#define CONFIG_PLATFORM_GIMBAL
-#define CONFIG_PLATFORM_BASE
+#define CONFIG_PLATFORM_GIMBAL
+//#define CONFIG_PLATFORM_BASE
 
 
 //========= Choose Robot ===========
