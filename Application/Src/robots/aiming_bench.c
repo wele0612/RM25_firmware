@@ -121,7 +121,7 @@ PID_t pitch_omega_pid={
     .P=3.0f,
     .I=1.0f,
     .D=0.0f,
-    .integral_max=0.8f
+    .integral_max=1.0f
 };
 
 // 0x0F is CAN(Slave) and 0x00 is Master
@@ -144,7 +144,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     const float target_pitch_omega=robot_geo.target_pitch_omega;
     float pitch_omega_error = target_pitch_omega - motors.pitch.speed;
-    const float pitch_torque = pid_cycle(&pitch_omega_pid, pitch_omega_error, CTRL_DELTA_T);
+    const float pitch_torque = pid_cycle(&pitch_omega_pid, pitch_omega_error, 0.001f);
     fdcanx_send_data(&hfdcan3, 0x0F, set_torque_DM4310(motors.pitch.tranmitbuf, pitch_torque), 8);
 
     vofa.val[0]=motors.pitch.position;
