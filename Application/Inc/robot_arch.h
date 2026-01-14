@@ -27,6 +27,7 @@
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
+            float target_pitch_omega;
 
         }robot_ctrl_t;
 
