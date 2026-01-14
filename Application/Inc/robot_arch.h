@@ -21,6 +21,16 @@
     
     #ifdef CONFIG_ROBOT_AIMING_BENCH
         // GIMBAL + AIMING_BENCH configuration
+        typedef struct robot_motors_t{
+            report_DM4310_t pitch;
+
+        }robot_motors_t;
+
+        typedef struct robot_ctrl_t{
+            float target_pitch_omega;
+
+        }robot_ctrl_t;
+
     #endif
 #endif
 

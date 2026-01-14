@@ -28,9 +28,15 @@ static void self_test(){
         if(fabs(robot_config.imu_gyro_offset[i])>imu_gyro_offset_max)   err=2;
     }
 
-    while(err){
-        buzzer_calibration_startup();
+    if (err) {
+        robot_config.imu_gyro_offset[0] = 0.0f;
+        robot_config.imu_gyro_offset[1] = 0.0f;
+        robot_config.imu_gyro_offset[2] = 0.0f;
     }
+
+    // while(err){
+    //     buzzer_calibration_startup();
+    // }
 }
 
 void robot_init(){
