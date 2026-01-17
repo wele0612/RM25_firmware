@@ -1,4 +1,5 @@
 #include<config.h>
+#include<application.h>
 #ifdef CONFIG_PLATFORM_GIMBAL
 
 
