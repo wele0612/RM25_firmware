@@ -119,9 +119,9 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
 
 PID_t pitch_omega_pid={
     .P=3.0f,
-    .I=1.0f,
-    .D=0.0f,
-    .integral_max=1.0f
+    .I=50.0f,
+    .D=0.01f,
+    .integral_max=0.03f
 };
 
 // 0x0F is CAN(Slave) and 0x00 is Master
@@ -143,17 +143,23 @@ void role_controller_step(const float CTRL_DELTA_T){
     // robot_geo.target_pitch_omega = dr16.channel[0]; 
 
     const float target_pitch_omega=robot_geo.target_pitch_omega;
-    float pitch_omega_error = target_pitch_omega - motors.pitch.speed;
-    const float pitch_torque = pid_cycle(&pitch_omega_pid, pitch_omega_error, 0.001f);
+    //float pitch_omega_error = target_pitch_omega - motors.pitch.speed;
+    float pitch_omega_error = target_pitch_omega - imu_data.gyro[1]*(PI/180.0f);
+    float pitch_torque = 0.0f;
+    //pitch_torque = pid_cycle(&pitch_omega_pid, pitch_omega_error, 0.001f);
+    pitch_torque+=1.1689f*imu_data.pitch+0.3553f;
     fdcanx_send_data(&hfdcan3, 0x0F, set_torque_DM4310(motors.pitch.tranmitbuf, pitch_torque), 8);
 
     vofa.val[0]=motors.pitch.position;
     vofa.val[1]=motors.pitch.speed;
-    vofa.val[2]=motors.pitch.torque_actual;
+    vofa.val[2]=imu_data.gyro[1]*(PI/180.0f);
     vofa.val[3]=target_pitch_omega;
     vofa.val[4]=pitch_omega_error;
     vofa.val[5]=pitch_torque;
+    vofa.val[6]=imu_data.pitch;
+    // vofa.val[6]=(float)gyro_raw[1];
 }
+//根据pitch计算前馈torque:y=1.1689x+0.7553;
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){
     switch (ID){
