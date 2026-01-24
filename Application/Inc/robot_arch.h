@@ -28,7 +28,7 @@
 
         typedef struct robot_ctrl_t{
             float target_pitch_omega;
-
+            float target_pitch_pos;
         }robot_ctrl_t;
 
     #endif
