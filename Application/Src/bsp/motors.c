@@ -109,9 +109,9 @@ void parse_feedback_M3508(uint8_t *msg, report_M3508_t *rpt){
 }
 
 
-/* =============== DM4310 =============== */
+/* =============== DaMiao series =============== */
 
-uint8_t *enable_DM4310(uint8_t *buf) { 
+uint8_t *enable_DM_Joint(uint8_t *buf) { 
     for(int i=0;i<7;i++){
         buf[i] = 0xff;
     }
@@ -119,7 +119,7 @@ uint8_t *enable_DM4310(uint8_t *buf) {
     return buf; 
 }
 
-uint8_t *disable_DM4310(uint8_t *buf) { 
+uint8_t *disable_DM_Joint(uint8_t *buf) { 
     for(int i=0;i<7;i++){
         buf[i] = 0xff;
     }
@@ -131,24 +131,26 @@ static const float P_MIN = -12.56637f, P_MAX = 12.56637f;
 static const float V_MIN = -45.0f, V_MAX = 45.0f;
 static const float KP_MIN = 0.0f, KP_MAX = 500.0f;
 static const float KD_MIN = 0.0f, KD_MAX = 5.0f;
-static const float T_MIN = -18.0f, T_MAX = 18.0f;
 
-uint8_t *set_MIT_DM4310(uint8_t *buf, float position,
+static const float T_MAX_8009P = 54.0f;
+static const float T_MAX_4310 = 18.0f;
+
+static uint8_t *set_MIT_DM_joint(uint8_t *buf, float position,
                         float velocity, float torque, const float kp,
-                        const float kd) {
+                        const float kd, const float T_MAX) {
 
     *(uint64_t*)buf = 0x0;
 
     position = constrain(position, P_MIN, P_MAX);
     velocity = constrain(velocity, V_MIN, V_MAX);
-    torque = constrain(torque, T_MIN, T_MAX);
+    torque = constrain(torque, -T_MAX, T_MAX);
 
     uint16_t pos_tmp,vel_tmp,kp_tmp,kd_tmp,tor_tmp;
     pos_tmp = dm_float_to_uint(position, P_MIN, P_MAX, 16);
     vel_tmp = dm_float_to_uint(velocity, V_MIN, V_MAX, 12);
     kp_tmp = dm_float_to_uint(kp, KP_MIN, KP_MAX, 12);
     kd_tmp = dm_float_to_uint(kd, KD_MIN, KD_MAX, 12);
-    tor_tmp = dm_float_to_uint(torque, T_MIN, T_MAX, 12);
+    tor_tmp = dm_float_to_uint(torque, -T_MAX, T_MAX, 12);
 
     buf[0] = (pos_tmp >> 8);
     buf[1] = pos_tmp;
@@ -162,14 +164,19 @@ uint8_t *set_MIT_DM4310(uint8_t *buf, float position,
     return buf;
 }
 
+
 uint8_t* set_torque_DM4310(uint8_t *buf, float torque){
-    return set_MIT_DM4310(buf, 0.0f, 0.0f, torque, 0.0f, 0.0f);
+    return set_MIT_DM_joint(buf, 0.0f, 0.0f, torque, 0.0f, 0.0f, T_MAX_4310);
 }
 
-void parse_feedback_DM4310(uint8_t *msg, report_DM4310_t *rpt, uint8_t head_id){
+uint8_t* set_torque_DM8009P(uint8_t *buf, float torque){
+    return set_MIT_DM_joint(buf, 0.0f, 0.0f, torque, 0.0f, 0.0f, T_MAX_8009P);
+}
+
+static void parse_feedback_DM_Joint(uint8_t *msg, report_DM_Joint_t *rpt, uint8_t head_id, const float T_MAX){
     uint16_t p_int, v_int, t_int;
 
-    if(msg[0] != head_id){// Double check to eliminate bugs.
+    if((msg[0] & 0x0f) != head_id){// Double check to eliminate bugs.
         return;
     }
 
@@ -177,15 +184,23 @@ void parse_feedback_DM4310(uint8_t *msg, report_DM4310_t *rpt, uint8_t head_id){
     v_int = (msg[3] << 4) | (msg[4] >> 4);
     t_int = ((msg[4] & 0xF) << 8) | msg[5];
     
-    rpt->position = dm_uint_to_float(p_int, P_MIN, P_MAX, 16); // (-12.5,12.5)
+    rpt->position = dm_uint_to_float(p_int, P_MIN, P_MAX, 16);
 
-    rpt->speed = dm_uint_to_float(v_int, V_MIN, V_MAX, 12); // (-45.0,45.0)
+    rpt->speed = dm_uint_to_float(v_int, V_MIN, V_MAX, 12);
 
-    rpt->torque_actual = dm_uint_to_float(t_int, T_MIN, T_MAX, 12); // (-18.0,18.0)
-
+    rpt->torque_actual = dm_uint_to_float(t_int, -T_MAX, T_MAX, 12);
 
     return;
 }
+
+void parse_feedback_DM4310(uint8_t *msg, report_DM4310_t *rpt, uint8_t head_id){
+    parse_feedback_DM_Joint(msg, (report_DM_Joint_t *)rpt, head_id, T_MAX_4310);
+}
+
+void parse_feedback_DM8009P(uint8_t *msg, report_DM8009P_t *rpt, uint8_t head_id){
+    parse_feedback_DM_Joint(msg, (report_DM_Joint_t *)rpt, head_id, T_MAX_8009P);
+}
+
 
 /* ============= M0603A-111 ============= */
 uint8_t* set_mode_M0603A(uint8_t *buf, uint8_t id, uint8_t mode){

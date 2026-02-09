@@ -3,7 +3,7 @@
 
 #include<stdint.h>
 
-/* =============== M3508 ================ */
+/* =============== M3508/M2006 ================ */
 #define M3508_CTRLID_ID1_4     0x200
 #define M3508_CTRLID_ID5_8     0x1FF
 
@@ -26,31 +26,43 @@ typedef struct report_M3508_t
 	uint32_t last_ontime;
 }report_M3508_t;
 
+// code for M2006 is identical to M3508
+typedef struct report_M3508_t report_M2006_t; 
+
 void parse_feedback_M3508(uint8_t *msg, report_M3508_t *rpt);
 
+/* =============== DM motors =============== */
+// ISSUE on ALL Damiao motors: The default position ranges from -12.5 ~ 12.5,
+// SET this value to multiples of PI on new motors!
+// typedef struct report_DM4310_t{
+// 	float speed;
+// 	float position;
+// 	float torque_actual;
 
-/* =============== DM4310 =============== */
-// ISSUE on ALL Damiao motors: The reported position ranges from -12.5 ~ 12.5,
-// DO NOT use warp_to_pi function directly!
-typedef struct report_DM4310_t{
+// 	uint8_t recvbuf[8];
+// 	uint8_t tranmitbuf[8];
+// }report_DM4310_t;
+
+typedef struct report_DM_Joint_t{
 	float speed;
 	float position;
 	float torque_actual;
 
 	uint8_t recvbuf[8];
 	uint8_t tranmitbuf[8];
-}report_DM4310_t;
+}report_DM_Joint_t;
 
-uint8_t *enable_DM4310(uint8_t *buf);
+typedef struct report_DM_Joint_t report_DM4310_t;
+typedef struct report_DM_Joint_t report_DM8009P_t;
 
-uint8_t *disable_DM4310(uint8_t *buf);
-
-uint8_t *set_MIT_DM4310(uint8_t *buf, float position, float velocity,
-                        float torque, const float kp, const float kd);
+uint8_t *enable_DM_Joint(uint8_t *buf);
+uint8_t *disable_DM_Joint(uint8_t *buf);
 
 uint8_t *set_torque_DM4310(uint8_t *buf, float torque);
+uint8_t *set_torque_DM8009P(uint8_t *buf, float torque);
 
 void parse_feedback_DM4310(uint8_t *msg, report_DM4310_t *rpt, uint8_t head_id);
+void parse_feedback_DM8009P(uint8_t *msg, report_DM8009P_t *rpt, uint8_t head_id);
 
 /* =============== M0603A =============== */
 #define M0603A_CTRLID_SETMODE		0xA0
@@ -68,7 +80,7 @@ void parse_feedback_DM4310(uint8_t *msg, report_DM4310_t *rpt, uint8_t head_id);
 
 #define M0603A_MSG_LENGTH 		(10U)
 
-uint8_t* set_mode_M0603A(uint8_t *buf, uint8_t id, uint8_t mode);
+uint8_t *set_mode_M0603A(uint8_t *buf, uint8_t id, uint8_t mode);
 
 uint8_t* set_current_M0603A(uint8_t* buf, uint8_t id, float current);
 

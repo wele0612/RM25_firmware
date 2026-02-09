@@ -168,7 +168,7 @@ void parse_referee_msg(int full_frame_size, const uint8_t* frame_begin_ptr){
     memcpy(&referee_prev, &referee, sizeof(Referee_info_t));
     
     uint16_t cmd_id = (frame_begin_ptr[6] << 8) | frame_begin_ptr[5];
-    void* content_ptr = frame_begin_ptr + 7;
+    const void* content_ptr = frame_begin_ptr + 7;
     int content_size = full_frame_size - (5+4);
 
     void* copy_dest_ptr = NULL;
