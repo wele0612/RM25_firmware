@@ -60,35 +60,32 @@ int dm_float_to_uint(float x, float x_min, float x_max, int bits){
 }
 
 /* =============== M3508 =============== */
-uint8_t* set_torque_M3508(uint8_t *buf, \
-    float m1_torque, float m2_torque, float m3_torque, float m4_torque){
+uint8_t* set_current_M3508(uint8_t *buf, \
+    float m1_current, float m2_current, float m3_current, float m4_current){
+    
+    const float MAX_CURRENT = 19.9f;
+    m1_current = fmaxf(-MAX_CURRENT, fminf(m1_current, MAX_CURRENT));
+    m2_current = fmaxf(-MAX_CURRENT, fminf(m2_current, MAX_CURRENT));
+    m3_current = fmaxf(-MAX_CURRENT, fminf(m3_current, MAX_CURRENT));
+    m4_current = fmaxf(-MAX_CURRENT, fminf(m4_current, MAX_CURRENT));
 
     const float m3508_current_to_int = (16384.0f/20.0f);
-
-    const float MAX_TORQUE = 19.5f * M3508_TORQUE_CONSTANT;
-
-    m1_torque = fmaxf(-MAX_TORQUE, fminf(m1_torque, MAX_TORQUE));
-    m2_torque = fmaxf(-MAX_TORQUE, fminf(m2_torque, MAX_TORQUE));
-    m3_torque = fmaxf(-MAX_TORQUE, fminf(m3_torque, MAX_TORQUE));
-    m4_torque = fmaxf(-MAX_TORQUE, fminf(m4_torque, MAX_TORQUE));
       
-    uint16_t m1_current = (int16_t)(m1_torque/M3508_TORQUE_CONSTANT*m3508_current_to_int);
-    buf[0] = m1_current >> 8;
-    buf[1] = m1_current & 0x00ff;
+    uint16_t m1_current_ = (int16_t)(m1_current*m3508_current_to_int);
+    buf[0] = m1_current_ >> 8;
+    buf[1] = m1_current_ & 0x00ff;
 
-    uint16_t m2_current = (int16_t)(m2_torque/M3508_TORQUE_CONSTANT*m3508_current_to_int);
-    buf[2] = m2_current >> 8;
-    buf[3] = m2_current & 0x00ff;
+    uint16_t m2_current_ = (int16_t)(m2_current*m3508_current_to_int);
+    buf[2] = m2_current_ >> 8;
+    buf[3] = m2_current_ & 0x00ff;
 
-    uint16_t m3_current = (int16_t)(m3_torque/M3508_TORQUE_CONSTANT*m3508_current_to_int);
-    buf[4] = m3_current >> 8;
-    buf[5] = m3_current & 0x00ff;
+    uint16_t m3_current_ = (int16_t)(m3_current*m3508_current_to_int);
+    buf[4] = m3_current_ >> 8;
+    buf[5] = m3_current_ & 0x00ff;
 
-    uint16_t m4_current = (int16_t)(m4_torque/M3508_TORQUE_CONSTANT*m3508_current_to_int);
-    buf[6] = m4_current >> 8;
-    buf[7] = m4_current & 0x00ff;
-
-    return buf;
+    uint16_t m4_current_ = (int16_t)(m4_current*m3508_current_to_int);
+    buf[6] = m4_current_ >> 8;
+    buf[7] = m4_current_ & 0x00ff;
 }
 
 void parse_feedback_M3508(uint8_t *msg, report_M3508_t *rpt){

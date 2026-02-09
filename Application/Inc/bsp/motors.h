@@ -8,13 +8,12 @@
 #define M3508_CTRLID_ID5_8     0x1FF
 
 #define M3508_TORQUE_CONSTANT 0.3f // Nm/A
+#define M3508_TORQUE_CONSTANT_CUSTOM_GB (M3508_TORQUE_CONSTANT*0.820941f) // Nm/A
 
 #define M3508_GEAR_RATIO	(187.0f/3591.0f)
+#define M3508_CUSTOM_GB_RATIO (17.0f/268.0f)
 #define M2006_GEAR_RATIO	(1.0f/36.0f)
 // M2006 also use this driver.
-
-uint8_t *set_torque_M3508(uint8_t *buf, \
-	float m1_torque, float m2_torque, float m3_torque, float m4_torque);
 
 typedef struct report_M3508_t
 {
@@ -27,7 +26,9 @@ typedef struct report_M3508_t
 }report_M3508_t;
 
 // code for M2006 is identical to M3508
-typedef struct report_M3508_t report_M2006_t; 
+typedef struct report_M3508_t report_M2006_t;
+
+uint8_t *set_current_M3508(uint8_t *buf, float m1_current, float m2_current, float m3_current, float m4_current);
 
 void parse_feedback_M3508(uint8_t *msg, report_M3508_t *rpt);
 
