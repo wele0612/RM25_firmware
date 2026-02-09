@@ -24,11 +24,11 @@ static void enable_all_Damiao(){
 }
 
 static const float L1 = 250.0e-3f;
-static const float L2 = 210.0e-3f;
-static const float d1 =  94.5e-3f;
+static const float L2 = 94.5e-3f + 115.5e-3f;
+static const float d1 = 94.5e-3f;
 static const float d2 = 112.5e-3f;
-static const float d3 = 102.5e-3f;
-static const float d4 = L2 - 115.5e-3f;
+static const float d3 = 112.5e-3f;
+static const float d4 = 94.5e-3f;
 
 static inline void forward_kinetics(float theta1, float theta2, float *L, float *theta){
     float theta12 = theta1 + theta2;
@@ -53,8 +53,15 @@ static inline void forward_kinetics(float theta1, float theta2, float *L, float 
     float theta4 = asinf((L1 / L_val) * sin_theta3);
     
     *L = L_val;
-    *theta = theta1 - theta4;
+    *theta = wrap_to_pi(theta1 - theta4);
 }
+
+PID_t wheel_l_vel_calib_pit={
+    .P=0.0f,
+    .I=0.0f,
+    .D=0.0f,
+    .integral_max=0.1f
+};
 
 void role_controller_init(){
     enable_all_Damiao();
@@ -64,7 +71,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     uint8_t wheel_tx_buf[8];
 
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, \
-        set_torque_M3508(wheel_tx_buf, 0.1f, 0.1f, 0.0f, 0.0f), 8);
+        set_current_M3508(wheel_tx_buf, 0.0f, 0.0f, 0.0f, 0.0f), 8);
 
     if(HAL_GetTick()%2==0){
         fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, 0.0f), 8);
@@ -73,19 +80,29 @@ void role_controller_step(const float CTRL_DELTA_T){
         fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, 0.0f), 8);
         fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, 0.0f), 8);
     }
+
+    const float left_th1=motors.joint_LF.position + (PI/2); 
+    const float left_th2= -motors.joint_LB.position + (PI/2);
+    forward_kinetics(left_th1, left_th2, &robot_geo.L_l, &robot_geo.th_ll);
+
+    const float right_th1 = -motors.joint_RF.position + (PI/2); 
+    const float right_th2 = motors.joint_RB.position + (PI/2);
+    forward_kinetics(right_th1, right_th2, &robot_geo.L_r, &robot_geo.th_lr);
+
+    
     
     vofa.val[0]=imu_data.yaw;
     vofa.val[1]=imu_data.pitch;
     vofa.val[2]=imu_data.gyro[1];
     vofa.val[3]=dr16.channel[0];
 
-    vofa.val[4]=motors.joint_LF.position*RADtoDEG;
-    vofa.val[5]=motors.joint_RF.position*RADtoDEG;
-    vofa.val[6]=motors.joint_LB.position*RADtoDEG;
-    vofa.val[7]=motors.joint_RB.position*RADtoDEG;
+    vofa.val[4]=left_th1*RADtoDEG;
+    vofa.val[5]=right_th1*RADtoDEG;
+    vofa.val[6]=robot_geo.L_r;
+    vofa.val[7]=robot_geo.th_lr*RADtoDEG;
 
-    vofa.val[8]=(float)robot_config.test_val;
-    vofa.val[9]=robot_config.imu_gyro_offset[2];
+    vofa.val[8]=robot_geo.L_l;
+    vofa.val[9]=robot_geo.th_ll*RADtoDEG;
 
     // vofa.val[8]=(float)dr16.s1;
     // vofa.val[9]=(float)dr16.s2;

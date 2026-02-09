@@ -66,7 +66,10 @@
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
-
+            float th_ll;
+            float th_lr;
+            float L_l;
+            float L_r;
         }robot_ctrl_t;
     #endif
     
