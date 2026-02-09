@@ -57,10 +57,17 @@ static inline void forward_kinetics(float theta1, float theta2, float *L, float 
 }
 
 PID_t wheel_l_vel_calib_pit={
-    .P=0.0f,
-    .I=0.0f,
+    .P=0.001f,
+    .I=0.03f,
     .D=0.0f,
-    .integral_max=0.1f
+    .integral_max=10.0f
+};
+
+PID_t wheel_r_vel_calib_pit={
+    .P=0.001f,
+    .I=0.03f,
+    .D=0.0f,
+    .integral_max=10.0f
 };
 
 void role_controller_init(){
@@ -69,17 +76,7 @@ void role_controller_init(){
 
 void role_controller_step(const float CTRL_DELTA_T){
     uint8_t wheel_tx_buf[8];
-
-    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, \
-        set_current_M3508(wheel_tx_buf, 0.0f, 0.0f, 0.0f, 0.0f), 8);
-
-    if(HAL_GetTick()%2==0){
-        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, 0.0f), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, 0.0f), 8);
-    }else{
-        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, 0.0f), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, 0.0f), 8);
-    }
+    // Legal leg length: 140mm to 330mm
 
     const float left_th1=motors.joint_LF.position + (PI/2); 
     const float left_th2= -motors.joint_LB.position + (PI/2);
@@ -89,15 +86,35 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float right_th2 = motors.joint_RB.position + (PI/2);
     forward_kinetics(right_th1, right_th2, &robot_geo.L_r, &robot_geo.th_lr);
 
-    
-    
+    const float target_wheel_vel = 3000.0f*dr16.channel[1];
+    // float wheel_l_T = pid_cycle(&wheel_l_vel_calib_pit, target_wheel_vel - motors.wheel_L.speed, CTRL_DELTA_T);
+    // float wheel_r_T = pid_cycle(&wheel_r_vel_calib_pit, target_wheel_vel - motors.wheel_R.speed, CTRL_DELTA_T);
+    float wheel_l_T = friction_compensation(motors.wheel_L.speed, 0.075f, (1/200.0f));
+    float wheel_r_T = friction_compensation(motors.wheel_R.speed, 0.138f, (1/200.0f));
+
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, \
+        set_current_M3508(wheel_tx_buf, 
+            wheel_l_T*(1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB), 
+            wheel_r_T*(1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
+            0.0f, 
+            0.0f),
+        8);
+
+    if(HAL_GetTick()%2==0){
+        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, 0.0f), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, 0.0f), 8);
+    }else{
+        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, 0.0f), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, 0.0f), 8);
+    }
+
     vofa.val[0]=imu_data.yaw;
     vofa.val[1]=imu_data.pitch;
-    vofa.val[2]=imu_data.gyro[1];
-    vofa.val[3]=dr16.channel[0];
+    vofa.val[2]=motors.wheel_R.speed;
+    vofa.val[3]=wheel_r_T;
 
-    vofa.val[4]=left_th1*RADtoDEG;
-    vofa.val[5]=right_th1*RADtoDEG;
+    vofa.val[4]=motors.wheel_L.speed;
+    vofa.val[5]=wheel_l_T;
     vofa.val[6]=robot_geo.L_r;
     vofa.val[7]=robot_geo.th_lr*RADtoDEG;
 
@@ -107,7 +124,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[8]=(float)dr16.s1;
     // vofa.val[9]=(float)dr16.s2;
     
-
 }
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){

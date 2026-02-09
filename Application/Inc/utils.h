@@ -33,6 +33,8 @@ typedef struct PID_t{
 
 float pid_cycle(PID_t *sys, float err, const float delta_t);
 
+float friction_compensation(float omega, const float coulomb_torque, const float omega_threshold_inv);
+
 float wrap_to_pi(float rad);
 float wrap_to_2pi(float rad);
 

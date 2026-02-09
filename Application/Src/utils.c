@@ -1,5 +1,7 @@
 #include <utils.h>
 
+#include <math.h>
+
 inline float pid_cycle(PID_t *sys, float err, const float delta_t){
     sys->integral += err*delta_t;
     if(sys->integral > sys->integral_max){
@@ -13,6 +15,25 @@ inline float pid_cycle(PID_t *sys, float err, const float delta_t){
 
     sys->err_m1 = err;
     return output;
+}
+
+float friction_compensation(float omega, const float coulomb_torque, const float omega_threshold_inv){
+    const float inv_threshold = omega_threshold_inv; // 1/omega
+    
+    // 归一化到 [-1, 1]
+    float x = omega * inv_threshold;
+    float abs_x = fabsf(x);
+    
+    if (abs_x >= 1.0f) {
+        // High speed saturation
+        return coulomb_torque * copysignf(1.0f, omega);
+    } else {
+        // 低速过渡区：3次多项式 f(x) = 1.5x - 0.5x³
+        // 满足 f(0)=0, f(±1)=±1, f'(±1)=0 (C1连续)
+        float x2 = x * x;
+        float smooth_factor = x * (1.5f - 0.5f * x2);
+        return coulomb_torque * smooth_factor;
+    }
 }
 
 inline float wrap_to_pi(float rad) {
