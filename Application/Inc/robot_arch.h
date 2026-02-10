@@ -70,6 +70,11 @@
             float th_lr;
             float L_l;
             float L_r;
+            float dth_ll;
+            float dth_lr;
+            float dL_l;
+            float dL_r;
+
 
             float Fnl; // leg noraml force (left), pointing outward
             float Fnr; // leg noraml force (right), pointing outward
@@ -77,6 +82,16 @@
             float Tblr; // leg torque (right)
             float Twl; // wheel torque (left)
             float Twr; // wheel torque (right)
+
+            float T_LF;
+            float T_LB;
+            float T_RF;
+            float T_RB;
+
+            float target_L_length;
+            float target_R_length;
+            float target_L_leg_omega;
+            float target_R_leg_omega;
 
         }robot_ctrl_t;
     #endif
