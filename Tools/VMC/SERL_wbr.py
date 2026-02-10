@@ -6,12 +6,18 @@ from tqdm import tqdm
 
 # Physical Design Parameters
 L1 = 250e-3
-L2 = 210e-3
+L2 = 94.5e-3 + 115.5e-3
 d1 = 94.5e-3
 d2 = 112.5e-3
-d3 = 102.5e-3
-d4 = L2 - 115.5e-3
+d3 = 112.5e-3
+d4 = 94.5e-3
 
+#static const float L1 = 250.0e-3f;
+# static const float L2 = 94.5e-3f + 115.5e-3f;
+# static const float d1 = 94.5e-3f;
+# static const float d2 = 112.5e-3f;
+# static const float d3 = 112.5e-3f;
+# static const float d4 = 94.5e-3f;
 # Forward Kinetics
 
 def forward_kinetics(theta1, theta2):
@@ -31,6 +37,42 @@ def forward_kinetics(theta1, theta2):
     # print("L = ", L)
     # print(f"theta = {theta} rad / {math.degrees(theta)} deg")
     return (L, theta)
+
+def forward_kinetics_symmetric(theta1, theta2):
+    # Args:
+    #     alpha: float, internal angle ∠DAC in radians (0 ≤ alpha ≤ π)
+    #            Note: When ∠DAB > 180°, alpha = ∠DAB/2 > π/2 (obtuse)
+    #     a: float, length of AB and AD (must be positive)
+    #     b: float, length of BC and DC (must be positive)
+    #     epsilon: float, numerical tolerance for geometric feasibility check
+    theta=(theta1-theta2)/2
+
+    theta12=theta1+theta2
+
+    alpha = theta12/2
+    sin_alpha = math.sin(alpha)
+
+    a=L2
+    b=L1
+    
+    # Calculate discriminant: b² - (a·sinα)²
+    # This represents the squared length of the projection in the calculation
+    discriminant_sq = b * b - a * a * sin_alpha * sin_alpha
+    
+    # Geometric feasibility check
+    # If negative, the arm BC is too short to reach from C to D given angle alpha
+    # if discriminant_sq < -epsilon:
+    #     return None
+    
+    # Numerical safety: clamp small negative values to zero
+    discriminant_sq = max(0.0, discriminant_sq)
+    
+    # Calculate AC using the quadratic solution (taking positive root for length)
+    # AC = a·cos(α) + √(b² - a²·sin²(α))
+    AC = a * math.cos(alpha) + math.sqrt(discriminant_sq)
+    L = AC
+
+    return (L,theta)
 
 # (L,theta) = forward_kinetics(theta1, theta2)
 
@@ -160,14 +202,20 @@ def force_convertsion(F_L, T_theta, theta1, theta2):
 # 测试代码
 if __name__ == "__main__":
     # 给定输入角度
-    # theta1 = math.pi/4
-    # theta2 = math.pi/4
+    theta1 = math.pi/2+math.pi/6
+    theta2 = math.pi/2
 
-    theta1 = 0.8
-    theta2 = 0.8203*2 - theta1
+    # theta1 = 0.8
+    # theta2 = 0.8203*2 - theta1
     
     print("=== 前向运动学 ===")
     L, theta = forward_kinetics(theta1, theta2)
+    print(f"L = {L:.6f}")
+    print(f"θ = {theta:.6f} rad ({math.degrees(theta):.2f}°)")
+    print()
+
+    print("=== 前向对称运动学 ===")
+    L, theta = forward_kinetics_symmetric(theta1, theta2)
     print(f"L = {L:.6f}")
     print(f"θ = {theta:.6f} rad ({math.degrees(theta):.2f}°)")
     print()

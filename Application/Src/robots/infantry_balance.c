@@ -30,30 +30,47 @@ static const float d2 = 112.5e-3f;
 static const float d3 = 112.5e-3f;
 static const float d4 = 94.5e-3f;
 
-static inline void forward_kinetics(float theta1, float theta2, float *L, float *theta){
-    float theta12 = theta1 + theta2;
-    float cos_theta12 = cosf(theta12);
-    float d5_sq = d1 * d1 + d4 * d4 - 2.0f * d1 * d4 * cos_theta12;
-    float d5 = sqrtf(d5_sq);
+static inline void forward_kinetics_jacobian(
+                            float theta1, float theta2, 
+                            float * restrict L, 
+                            float * restrict theta, 
+                            float * restrict J){
+
+    float alpha = (theta1 + theta2) * 0.5f;
+    float sin_a = sinf(alpha);
+    float cos_a = cosf(alpha);
     
-    float A = (d4 * d4 + d5 * d5 - d1 * d1) / (2.0f * d4 * d5);
-    float B = (d3 * d3 + d5 * d5 - d2 * d2) / (2.0f * d3 * d5);
+    float a = L2;
+    float b = L1;
     
-    float theta3_p1 = acosf(A);
-    float theta3_p2 = acosf(B);
-    float theta3 = theta3_p1 + theta3_p2;
+    float a_sin_a = a * sin_a;
+    float disc_sq = b * b - a_sin_a * a_sin_a;
     
-    // calculate leg length (L)
-    float cos_theta3 = cosf(theta3);
-    float L_sq = L1 * L1 + L2 * L2 - 2.0f * L1 * L2 * cos_theta3;
-    float L_val = sqrtf(L_sq);
+    if (disc_sq < 0.0f) {
+        disc_sq = 0.0f;
+    }
+    float sqrt_disc = sqrtf(disc_sq);
     
-    // calculate leg angle (Theta)
-    float sin_theta3 = sinf(theta3);
-    float theta4 = asinf((L1 / L_val) * sin_theta3);
+    *L = a * cos_a + sqrt_disc;
+    *theta = (theta1 - theta2) * 0.5f;
     
-    *L = L_val;
-    *theta = wrap_to_pi(theta1 - theta4);
+    // dL/dalpha = -a*sin(alpha) * (1 + a*cos(alpha)/sqrt_disc)
+    float dL_dalpha;
+    const float eps = 1e-6f;
+    
+    if (sqrt_disc < eps) {
+        dL_dalpha = -a * sin_a;  
+    } else {
+        dL_dalpha = -a * sin_a * (1.0f + (a * cos_a) / sqrt_disc);
+    }
+    
+    float half_dL = 0.5f * dL_dalpha;
+    
+    J[0] = half_dL;
+    J[1] = 0.5f;
+    J[2] = -half_dL;
+    J[3] = 0.5f;
+
 }
 
 PID_t wheel_l_vel_calib_pit={
@@ -77,49 +94,64 @@ void role_controller_init(){
 void role_controller_step(const float CTRL_DELTA_T){
     uint8_t wheel_tx_buf[8];
     // Legal leg length: 140mm to 330mm
+    robot_ctrl_t *geo = &robot_geo;
 
     const float left_th1=motors.joint_LF.position + (PI/2); 
     const float left_th2= -motors.joint_LB.position + (PI/2);
-    forward_kinetics(left_th1, left_th2, &robot_geo.L_l, &robot_geo.th_ll);
+    float J_l[4];
+    forward_kinetics_jacobian(left_th1, left_th2, &geo->L_l, &geo->th_ll, J_l);
 
     const float right_th1 = -motors.joint_RF.position + (PI/2); 
     const float right_th2 = motors.joint_RB.position + (PI/2);
-    forward_kinetics(right_th1, right_th2, &robot_geo.L_r, &robot_geo.th_lr);
+    float J_r[4];
+    forward_kinetics_jacobian(right_th1, right_th2, &geo->L_r, &geo->th_lr, J_r);
+
+    geo->Fnl = 20.0f;
+    geo->Tbll = 2.0f;
+
+    geo->Fnr = 20.0f;
+    geo->Tblr = 2.0f;
 
     const float target_wheel_vel = 3000.0f*dr16.channel[1];
     // float wheel_l_T = pid_cycle(&wheel_l_vel_calib_pit, target_wheel_vel - motors.wheel_L.speed, CTRL_DELTA_T);
     // float wheel_r_T = pid_cycle(&wheel_r_vel_calib_pit, target_wheel_vel - motors.wheel_R.speed, CTRL_DELTA_T);
-    float wheel_l_T = friction_compensation(motors.wheel_L.speed, 0.075f, (1/200.0f));
-    float wheel_r_T = friction_compensation(motors.wheel_R.speed, 0.138f, (1/200.0f));
+    // geo->Twl = friction_compensation(motors.wheel_L.speed, 0.075f, (1/200.0f));
+    // geo->Twr = friction_compensation(motors.wheel_R.speed, 0.138f, (1/200.0f));
+
+    float T_LF = J_l[0]*geo->Fnl + J_l[1]*geo->Tbll;
+    float T_LB = J_l[2]*geo->Fnl + J_l[3]*geo->Tbll;
+
+    float T_RF = - J_r[0]*geo->Fnr + J_r[1]*geo->Tblr;
+    float T_RB = - J_r[2]*geo->Fnr + J_r[3]*geo->Tblr;
 
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, \
         set_current_M3508(wheel_tx_buf, 
-            wheel_l_T*(1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB), 
-            wheel_r_T*(1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
+            geo->Twl*(1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB), 
+            geo->Twr*(1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
             0.0f, 
             0.0f),
         8);
 
     if(HAL_GetTick()%2==0){
-        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, 0.0f), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, 0.0f), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, T_LF), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, T_LB), 8);
     }else{
-        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, 0.0f), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, 0.0f), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, T_RF), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, T_RB), 8);
     }
 
     vofa.val[0]=imu_data.yaw;
     vofa.val[1]=imu_data.pitch;
-    vofa.val[2]=motors.wheel_R.speed;
-    vofa.val[3]=wheel_r_T;
 
-    vofa.val[4]=motors.wheel_L.speed;
-    vofa.val[5]=wheel_l_T;
+    vofa.val[2]=J_l[0];
+    vofa.val[3]=J_l[1];
+    vofa.val[4]=T_RF;
+    vofa.val[5]=T_RB;
     vofa.val[6]=robot_geo.L_r;
-    vofa.val[7]=robot_geo.th_lr*RADtoDEG;
+    vofa.val[7]=robot_geo.L_l;
 
-    vofa.val[8]=robot_geo.L_l;
-    vofa.val[9]=robot_geo.th_ll*RADtoDEG;
+    vofa.val[8]=T_LF;
+    vofa.val[9]=T_LB;
 
     // vofa.val[8]=(float)dr16.s1;
     // vofa.val[9]=(float)dr16.s2;

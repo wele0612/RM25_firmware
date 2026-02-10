@@ -70,6 +70,14 @@
             float th_lr;
             float L_l;
             float L_r;
+
+            float Fnl; // leg noraml force (left), pointing outward
+            float Fnr; // leg noraml force (right), pointing outward
+            float Tbll; // leg torque (left)
+            float Tblr; // leg torque (right)
+            float Twl; // wheel torque (left)
+            float Twr; // wheel torque (right)
+
         }robot_ctrl_t;
     #endif
     
