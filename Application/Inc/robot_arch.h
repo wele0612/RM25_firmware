@@ -65,17 +65,26 @@
             
         }robot_motors_t;
 
-        typedef struct robot_ctrl_t{
-            float th_ll;
-            float th_lr;
+        typedef struct robot_ctrl_t{ // All Units in SI
             float L_l;
             float L_r;
-            float dth_ll;
-            float dth_lr;
             float dL_l;
             float dL_r;
 
+            float s; // increase if moving forward
+            float ds; // positive moving forward
+            float phi; // right-hand rule, pointing upward
+            float dphi; // right-hand rule, pointing upward
+            float th_ll; // left leg - ground angle, positive when wheel is behind the body
+            float dth_ll; // derivative of th_ll
+            float th_lr; // right leg - ground angle, positive when wheel is behind the body
+            float dth_lr; // derivative of th_lr
+            float th_b; // body - ground angle, positive when nose-down, tail-up
+            float dth_b; // derivative of th_b
 
+            float s_max;
+ 
+            // float 
             float Fnl; // leg noraml force (left), pointing outward
             float Fnr; // leg noraml force (right), pointing outward
             float Tbll; // leg torque (left)

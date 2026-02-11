@@ -52,7 +52,7 @@ static inline void forward_kinetics_jacobian(
     float sqrt_disc = sqrtf(disc_sq);
     
     *L = a * cos_a + sqrt_disc;
-    *theta = (theta1 - theta2) * 0.5f;
+    *theta = wrap_to_pi((theta1 - theta2) * 0.5f);
     
     // dL/dalpha = -a*sin(alpha) * (1 + a*cos(alpha)/sqrt_disc)
     float dL_dalpha;
@@ -101,6 +101,20 @@ PID_t leftleg_dtheta_pid={ // left side leg angular velocity
     .integral_max=1.0f
 };
 
+PID_t rightleg_length_pid={ // right side leg length
+    .P=1000.0f,
+    .I=0.0f,
+    .D=30.0f,
+    .integral_max=10.0f
+};
+
+PID_t rightleg_dtheta_pid={ // right side leg angular velocity
+    .P=30.0f,
+    .I=0.0f,
+    .D=0.0f,
+    .integral_max=1.0f
+};
+
 enum {
     WBR_STANDBY=0, // All joints disabled. Default after power-up
     WBR_CONST_VEL, // Constant leg rotation velocity
@@ -110,6 +124,8 @@ enum {
 
 void role_controller_init(){
     enable_all_Damiao();
+
+    robot_geo.s_max = 0.3f;
 }
 
 void role_controller_step(const float CTRL_DELTA_T){
@@ -124,10 +140,12 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
     geo->target_L_leg_omega = 0.5f * dr16.channel[2];
+    geo->target_R_length = 0.22f + 0.08f*dr16.channel[1];
+    geo->target_R_leg_omega = 0.5f * dr16.channel[0];
 
-    geo->target_R_length = 0.2f;
+    // geo->target_R_length = 0.2f;
 
-    const float target_wheel_vel = 3000.0f*dr16.channel[1];
+    // const float target_wheel_vel = 3000.0f*dr16.channel[1];
     // float wheel_l_T = pid_cycle(&wheel_l_vel_calib_pit, target_wheel_vel - motors.wheel_L.speed, CTRL_DELTA_T);
     // float wheel_r_T = pid_cycle(&wheel_r_vel_calib_pit, target_wheel_vel - motors.wheel_R.speed, CTRL_DELTA_T);
     // geo->Twl = friction_compensation(motors.wheel_L.speed, 0.075f, (1/200.0f));
@@ -143,35 +161,58 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float left_dth2 = motors.joint_LB.speed;
     const float right_dth1 = motors.joint_RF.speed;
     const float right_dth2 = -motors.joint_RB.speed;
+
+    
+
+
+
     if(HAL_GetTick()%2==0){
         forward_kinetics_jacobian(left_th1, left_th2, &geo->L_l, &geo->th_ll, J_l);
         geo->dth_ll = J_l[0]*left_dth1 + J_l[2]*left_dth2;
         geo->dL_l = J_l[1]*left_dth1 + J_l[3]*left_dth2;
     }else{
         forward_kinetics_jacobian(right_th1, right_th2, &geo->L_r, &geo->th_lr, J_r);
-        
+        geo->dth_lr = J_r[0]*right_dth1 + J_r[2]*right_dth2;
+        geo->dL_r = J_r[1]*right_dth1 + J_r[3]*right_dth2;
     }
 
-    if(HAL_GetTick()%2==0){ // Left side
-        geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
-        // geo->Fnl = 0.0f;
-        geo->Tbll = pid_cycle(&leftleg_dtheta_pid, wrap_to_pi(geo->target_L_leg_omega - geo->dth_ll), CTRL_DELTA_T*2);
-
-        geo->T_LF = J_l[0]*geo->Fnl + J_l[1]*geo->Tbll;
-        geo->T_LB = J_l[2]*geo->Fnl + J_l[3]*geo->Tbll;
-
-    }else{ // Right side
-        geo->Fnr = 0.0f;
-        geo->Tblr = 0.0f;
-
-        geo->T_RF = - J_r[0]*geo->Fnr + J_r[1]*geo->Tblr;
-        geo->T_RB = - J_r[2]*geo->Fnr + J_r[3]*geo->Tblr;
+    if(wbr_state == WBR_CONST_VEL){
+        if(HAL_GetTick()%2==0){ // Left side
+            geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
+            // geo->Tbll = 2.0f;
+            geo->Tbll = pid_cycle(&leftleg_dtheta_pid, wrap_to_pi(geo->target_L_leg_omega - geo->dth_ll), CTRL_DELTA_T*2);
+        }else{ // Right side
+            geo->Fnr = pid_cycle(&rightleg_length_pid, geo->target_R_length - geo->L_r, CTRL_DELTA_T*2);
+            // geo->Tblr = 2.0f;
+            geo->Tblr = pid_cycle(&rightleg_dtheta_pid, wrap_to_pi(geo->target_R_leg_omega - geo->dth_lr), CTRL_DELTA_T*2);
+        }
+    }else if(wbr_state == WBR_LQR){
+        if(HAL_GetTick()%2==0){ // Left side
+            geo->Fnl = 0.0f;
+            geo->Tbll = 0.0f;
+        }else{ // Right side
+            geo->Fnr = 0.0f;
+            geo->Tblr = 0.0f;
+        }
+    }else if(wbr_state == WBR_STANDBY){
+        if(HAL_GetTick()%2==0){ // Left side
+            geo->Fnl = 0.0f;
+            geo->Tbll = 0.0f;
+        }else{ // Right side
+            geo->Fnr = 0.0f;
+            geo->Tblr = 0.0f;
+        }
     }
+
 
     if(HAL_GetTick()%2==0){
+        geo->T_LF = J_l[0]*geo->Fnl + J_l[1]*geo->Tbll;
+        geo->T_LB = J_l[2]*geo->Fnl + J_l[3]*geo->Tbll;
         fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, geo->T_LF), 8);
         fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, geo->T_LB), 8);
     }else{
+        geo->T_RF = - J_r[0]*geo->Fnr - J_r[1]*geo->Tblr;
+        geo->T_RB = - J_r[2]*geo->Fnr - J_r[3]*geo->Tblr;
         fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, geo->T_RF), 8);
         fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, geo->T_RB), 8);
     }
@@ -184,15 +225,14 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    
     vofa.val[0]=imu_data.yaw;
     vofa.val[1]=imu_data.pitch;
 
-    vofa.val[2]=geo->L_l;
-    vofa.val[3]=geo->dL_l;
+    vofa.val[2]=geo->th_ll;
+    vofa.val[3]=geo->dth_ll;
 
-    vofa.val[4]=geo->th_ll;
-    vofa.val[5]=geo->dth_ll;
+    vofa.val[4]=geo->th_lr;
+    vofa.val[5]=geo->dth_lr;
     // vofa.val[3]=J_l[1];
     // vofa.val[4]=T_RF;
     // vofa.val[5]=T_RB;
