@@ -118,6 +118,7 @@ PID_t rightleg_dtheta_pid={ // right side leg angular velocity
 enum {
     WBR_STANDBY=0, // All joints disabled. Default after power-up
     WBR_CONST_VEL, // Constant leg rotation velocity
+    WBR_LQR_PREP,  // Set leg, get ready to stand up
     WBR_LQR,       // Normal LQR driving mode
     WBR_FLOAT      // Floating mode, leg not touching ground
 }wbr_state;
@@ -135,13 +136,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     if(dr16.s1 == 0x1){
         wbr_state=WBR_CONST_VEL;
     }else{
-        wbr_state=WBR_LQR;
-    }
-
-    geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
-    geo->target_L_leg_omega = 0.5f * dr16.channel[2];
-    geo->target_R_length = 0.22f + 0.08f*dr16.channel[1];
-    geo->target_R_leg_omega = 0.5f * dr16.channel[0];
+        wbr_state=WBR_LQR_PREP;
+    }    
 
     // geo->target_R_length = 0.2f;
 
@@ -162,29 +158,65 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float right_dth1 = motors.joint_RF.speed;
     const float right_dth2 = -motors.joint_RB.speed;
 
-    
+    float yaw_diff = imu_data.yaw - geo->yaw_m1;
+    geo->yaw_m1 = imu_data.yaw;
+    // Wheel distance: 430mm (?)
+    float wheel_dphi = (motors.wheel_R.speed + motors.wheel_L.speed)
+        *(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f/0.215f);
+    if(fabsf(wheel_dphi) >= 0.005f || fabs(yaw_diff)>= 0.00002f){
+        geo->yaw_f = wrap_to_pi(geo->yaw_f + yaw_diff);
+    }    
 
+    // Wheel size: 120mm
+    float ds = (motors.wheel_R.speed - motors.wheel_L.speed)*(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f);
+    const float ds_alpha = 0.2f;
+    geo->ds = ds*ds_alpha + geo->ds*(1.0f - ds_alpha);
+    geo->s = limit_val(geo->s + CTRL_DELTA_T*ds, geo->s_max);
 
+    geo->phi = imu_data.yaw;
+    geo->dphi = -imu_data.gyro[2]*DEGtoRAD;
 
     if(HAL_GetTick()%2==0){
-        forward_kinetics_jacobian(left_th1, left_th2, &geo->L_l, &geo->th_ll, J_l);
-        geo->dth_ll = J_l[0]*left_dth1 + J_l[2]*left_dth2;
+        forward_kinetics_jacobian(left_th1, left_th2, &geo->L_l, &geo->th_ll_nb, J_l);
+        geo->dth_ll_nb = J_l[0]*left_dth1 + J_l[2]*left_dth2;
         geo->dL_l = J_l[1]*left_dth1 + J_l[3]*left_dth2;
     }else{
-        forward_kinetics_jacobian(right_th1, right_th2, &geo->L_r, &geo->th_lr, J_r);
-        geo->dth_lr = J_r[0]*right_dth1 + J_r[2]*right_dth2;
+        forward_kinetics_jacobian(right_th1, right_th2, &geo->L_r, &geo->th_lr_nb, J_r);
+        geo->dth_lr_nb = J_r[0]*right_dth1 + J_r[2]*right_dth2;
         geo->dL_r = J_r[1]*right_dth1 + J_r[3]*right_dth2;
     }
 
+    geo->th_b = -imu_data.pitch;
+    geo->dth_b = imu_data.gyro[1]*DEGtoRAD;
+
+    geo->th_ll = wrap_to_pi(geo->th_ll_nb +  geo->th_b);
+    geo->dth_ll = geo->dth_ll_nb + geo->dth_b;
+    geo->th_lr = wrap_to_pi(geo->th_lr_nb +  geo->th_b);
+    geo->dth_lr = geo->dth_lr_nb + geo->dth_b;
+
+    // ================== Update target value =======================
+
     if(wbr_state == WBR_CONST_VEL){
+        geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
+        geo->target_L_leg_omega = 0.5f * dr16.channel[2];
+        geo->target_R_length = 0.22f + 0.08f*dr16.channel[1];
+        geo->target_R_leg_omega = 0.5f * dr16.channel[0];
+    }else if(wbr_state == WBR_LQR_PREP){
+        geo->target_L_length = 0.19f;
+        geo->target_L_leg_omega = limit_val(-2.0f*geo->th_ll_nb, 0.8f);
+        geo->target_R_length = 0.19f;
+        geo->target_R_leg_omega = limit_val(-2.0f*geo->th_lr_nb, 0.8f);
+    }
+
+    // ==================== Update Controllers =====================
+
+    if(wbr_state == WBR_CONST_VEL || wbr_state == WBR_LQR_PREP){
         if(HAL_GetTick()%2==0){ // Left side
             geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
-            // geo->Tbll = 2.0f;
-            geo->Tbll = pid_cycle(&leftleg_dtheta_pid, wrap_to_pi(geo->target_L_leg_omega - geo->dth_ll), CTRL_DELTA_T*2);
+            geo->Tbll = pid_cycle(&leftleg_dtheta_pid, wrap_to_pi(geo->target_L_leg_omega - geo->dth_ll_nb), CTRL_DELTA_T*2);
         }else{ // Right side
             geo->Fnr = pid_cycle(&rightleg_length_pid, geo->target_R_length - geo->L_r, CTRL_DELTA_T*2);
-            // geo->Tblr = 2.0f;
-            geo->Tblr = pid_cycle(&rightleg_dtheta_pid, wrap_to_pi(geo->target_R_leg_omega - geo->dth_lr), CTRL_DELTA_T*2);
+            geo->Tblr = pid_cycle(&rightleg_dtheta_pid, wrap_to_pi(geo->target_R_leg_omega - geo->dth_lr_nb), CTRL_DELTA_T*2);
         }
     }else if(wbr_state == WBR_LQR){
         if(HAL_GetTick()%2==0){ // Left side
@@ -203,7 +235,6 @@ void role_controller_step(const float CTRL_DELTA_T){
             geo->Tblr = 0.0f;
         }
     }
-
 
     if(HAL_GetTick()%2==0){
         geo->T_LF = J_l[0]*geo->Fnl + J_l[1]*geo->Tbll;
@@ -225,17 +256,25 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    vofa.val[0]=imu_data.yaw;
-    vofa.val[1]=imu_data.pitch;
+    vofa.val[0]=geo->s;
+    vofa.val[1]=geo->ds;
 
-    vofa.val[2]=geo->th_ll;
-    vofa.val[3]=geo->dth_ll;
+    vofa.val[2]=geo->phi;
+    vofa.val[3]=geo->dphi;
 
-    vofa.val[4]=geo->th_lr;
-    vofa.val[5]=geo->dth_lr;
+    vofa.val[4]=geo->th_ll;
+    vofa.val[5]=geo->dth_ll;
+
+    vofa.val[6]=geo->th_lr;
+    vofa.val[7]=geo->dth_lr;
+
+    vofa.val[8]=geo->th_b;
+    vofa.val[9]=geo->dth_b;
+
     // vofa.val[3]=J_l[1];
-    // vofa.val[4]=T_RF;
-    // vofa.val[5]=T_RB;
+    // vofa.val[4]=wheel_dphi;
+    // vofa.val[5]=geo->yaw_f*RADtoDEG;
+    // vofa.val[6]=imu_data.gyro[2];
     // vofa.val[6]=robot_geo.L_r;
     // vofa.val[7]=robot_geo.L_l;
 

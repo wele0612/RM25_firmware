@@ -6,6 +6,8 @@
 #define RADtoDEG (180.0f/PI)
 #define DEGtoRAD (PI/180.0f)
 
+#define RPMtoRADS (2*PI/60.0f)
+
 // -----------------------------------------------------------
 /** What the below macros are used for:
  * In STM32, there are memory areas called DTCM and ITCM. DTCM nice, as it provides same-cycle
