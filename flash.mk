@@ -1,6 +1,15 @@
 # Author: Liwei Xue 2024.3.20
 # Flash script for makefile project, using OPENOCD.
 
+# Detect OS
+ifeq ($(OS),Windows_NT)
+    # Windows: use environment OPENOCD_HOME
+else
+    # Linux / Unix: default to /usr if not set
+    OPENOCD_HOME ?= /usr
+endif
+
+
 OCDSCRIPT_PATH = $(subst \,/,$(OPENOCD_HOME))/share/openocd/scripts
 #On windows "\" in file path will cause problems in OPENOCD
 
