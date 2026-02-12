@@ -85,6 +85,8 @@
             float th_b; // body - ground angle, positive when nose-down, tail-up
             float dth_b; // derivative of th_b
 
+            float lqr_err[10];
+
             // Same, but relative to robot body coordinate system: Does not consider th_b
             float th_ll_nb; // left leg - ground angle, positive when wheel is behind the body
             float dth_ll_nb; // derivative of th_ll
@@ -106,10 +108,17 @@
             float T_RF;
             float T_RB;
 
+            float target_ds;
+            float target_dphi;
+            float target_b_height;
+
             float target_L_length;
             float target_R_length;
+
             float target_L_leg_omega;
             float target_R_leg_omega;
+
+            float thlr_diff;
 
         }robot_ctrl_t;
     #endif

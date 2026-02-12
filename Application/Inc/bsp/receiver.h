@@ -28,10 +28,14 @@ Bit7 -- Ctrl 键
 #define DR16_KEY_Q_BIT  (1U << 6)
 #define DR16_KEY_E_BIT  (1U << 7)
 
+#define DR16_SWITCH_UP (0x1)
+#define DR16_SWITCH_MID (0x3)
+#define DR16_SWITCH_DOWN (0x2)
+
 typedef struct receiver_DBUS_t{
     float channel[4];
-    int8_t s1;
-    int8_t s2;
+    int8_t s1; // {Up, Mid, Down}={1,3,2}
+    int8_t s2; // {Up, Mid, Down}={1,3,2}
     float thumbwheel;
 
     struct
