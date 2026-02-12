@@ -109,16 +109,18 @@
             float T_RB;
 
             float target_ds;
+            float target_phi;
             float target_dphi;
+            float target_th_ll;
+            float target_th_lr;
             float target_b_height;
+            
 
             float target_L_length;
             float target_R_length;
 
             float target_L_leg_omega;
             float target_R_leg_omega;
-
-            float thlr_diff;
 
         }robot_ctrl_t;
     #endif

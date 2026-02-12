@@ -121,7 +121,7 @@ enum {
 void role_controller_init(){
     enable_all_Damiao();
 
-    robot_geo.s_max = 0.3f;
+    robot_geo.s_max = 0.5f;
     robot_geo.target_L_length = 0.21f;
     robot_geo.target_R_length = 0.21f;
 }
@@ -167,9 +167,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     // Wheel size: 120mm
     float ds = (motors.wheel_R.speed - motors.wheel_L.speed)*(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f);
     const float ds_alpha = 0.2f;
+    if(fabsf(geo->target_ds) < 0.1f){
+        geo->s = limit_val(geo->s + CTRL_DELTA_T*(ds-geo->target_ds), geo->s_max);
+    }
     geo->ds = ds*ds_alpha + geo->ds*(1.0f - ds_alpha);
-    geo->s = limit_val(geo->s + CTRL_DELTA_T*ds, geo->s_max);
-
+    
     geo->phi = imu_data.yaw;
     geo->dphi = -imu_data.gyro[2]*DEGtoRAD;
 
@@ -179,11 +181,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->dth_ll_nb = -(J_l[1]*left_dth1 + J_l[3]*left_dth2);
 
     }else{
-        float thlr_m1=geo->th_lr_nb;
         forward_kinetics_jacobian(right_th1, right_th2, &geo->L_r, &geo->th_lr_nb, J_r);
-
-        geo->thlr_diff = (geo->th_lr_nb - thlr_m1)*(0.5f/CTRL_DELTA_T);
-
         geo->dL_r = J_r[0]*right_dth1 + J_r[2]*right_dth2;
         geo->dth_lr_nb = -(J_r[1]*right_dth1 + J_r[3]*right_dth2);
     }
@@ -211,9 +209,18 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_R_length = 0.19f;
         geo->target_R_leg_omega = limit_val(-3.0f*geo->th_lr_nb, 1.6f);
 
+        geo->target_phi = geo->phi;
+
     }else if(wbr_state == WBR_LQR){
-        geo->target_L_length = 0.21f;
-        geo->target_R_length = 0.21f;
+        geo->target_L_length = 0.22f;
+        geo->target_R_length = 0.22f;
+
+        geo->target_th_ll = 4.5f*DEGtoRAD;
+        geo->target_th_lr = 4.5f*DEGtoRAD;
+
+        geo->target_ds = dr16.channel[1]*0.8f;
+        geo->target_dphi = -dr16.channel[0]*3.0f;
+        geo->target_phi += geo->target_dphi*CTRL_DELTA_T;
     }
 
     // ==================== Update Controllers =====================
@@ -230,19 +237,19 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->Twr = pid_cycle(&wheel_r_vel_calib_pit, - motors.wheel_R.speed, CTRL_DELTA_T);
     }else if(wbr_state == WBR_LQR){
         const float K_mat[4][10] = {
-            {-0.81956f, -2.15260f, -0.71783f, -1.61751f, -6.51210f, -0.62333f, -5.05791f, -0.50117f, -0.67921f, -0.99971f},
-            {-0.81956f, -2.15260f, 0.71783f, 1.61751f, -5.05791f, -0.50117f, -6.51210f, -0.62333f, -0.67921f, -0.99971f},
-            {3.86327f, 9.70932f, -1.50689f, -3.44513f, 22.38790f, 2.21340f, 0.60872f, 0.99833f, -12.69420f, -3.50587f},
-            {3.86327f, 9.70932f, 1.50689f, 3.44513f, 0.60872f, 0.99833f, 22.38790f, 2.21340f, -12.69420f, -3.50587f}
+            {-0.40555f, -2.71021f, -0.71682f, -1.61511f, -7.35533f, -0.75944f, -5.93664f, -0.61676f, -5.34036f, -1.19106f},
+            {-0.40555f, -2.71021f, 0.71682f, 1.61511f, -5.93664f, -0.61676f, -7.35533f, -0.75944f, -5.34036f, -1.19106f},
+            {1.59154f, 10.49932f, -1.51410f, -3.46195f, 23.40675f, 2.50539f, 1.94371f, 1.15647f, -34.49917f, -3.78973f},
+            {1.59154f, 10.49932f, 1.51410f, 3.46195f, 1.94371f, 1.15647f, 23.40675f, 2.50539f, -34.49917f, -3.78973f}
         };
 
         geo->lqr_err[0]= 0.0f - geo->s;
-        geo->lqr_err[1]= 0.0f - geo->ds;
-        geo->lqr_err[2]= 0.0f - geo->phi;
-        geo->lqr_err[3]= 0.0f - geo->dphi;
-        geo->lqr_err[4]= 0.0f - geo->th_ll;
+        geo->lqr_err[1]= geo->target_ds - geo->ds;
+        geo->lqr_err[2]= wrap_to_pi(geo->target_phi - geo->phi);
+        geo->lqr_err[3]= geo->target_dphi - geo->dphi;
+        geo->lqr_err[4]= wrap_to_pi(geo->target_th_ll - geo->th_ll);
         geo->lqr_err[5]= 0.0f - geo->dth_ll;
-        geo->lqr_err[6]= 0.0f - geo->th_lr;
+        geo->lqr_err[6]= wrap_to_pi(geo->target_th_lr - geo->th_lr);
         geo->lqr_err[7]= 0.0f - geo->dth_lr;
         geo->lqr_err[8]= 0.0f - geo->th_b;
         geo->lqr_err[9]= 0.0f - geo->dth_b;
@@ -254,11 +261,17 @@ void role_controller_step(const float CTRL_DELTA_T){
         // Twl cause ds(body velocity) to increase
 
         // [Twll Twlr Tbll Tblr]
-        geo->Twl = -0.15f;
-        geo->Twr = 0.15f;
+        geo->Twl = -0.0f; // CAUTION: Twl here is OPPOSITE DIRECTION!!!!!!
+        geo->Twr = 0.0f;
         geo->Tbll = 0.0f;
         geo->Tblr = 0.0f;
-
+        for(int i=0;i<10;i++){
+            geo->Twl -= K_mat[0][i]*geo->lqr_err[i];
+            geo->Twr += K_mat[1][i]*geo->lqr_err[i];
+            geo->Tbll += K_mat[2][i]*geo->lqr_err[i];
+            geo->Tblr += K_mat[3][i]*geo->lqr_err[i];
+        }
+        
         if(HAL_GetTick()%2==0){ // Left side
             geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
         }else{ // Right side
@@ -277,8 +290,8 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->Twr = 0.0f;
     }
 
-    geo->Twl += friction_compensation(motors.wheel_L.speed, 0.05f, (1/100.0f));
-    geo->Twr += friction_compensation(motors.wheel_R.speed, 0.15f, (1/100.0f));
+    // geo->Twl += friction_compensation(motors.wheel_L.speed, 0.05f, (1/100.0f));
+    // geo->Twr += friction_compensation(motors.wheel_R.speed, 0.15f, (1/100.0f));
 
     // ==================== Send to Motors =====================
 
