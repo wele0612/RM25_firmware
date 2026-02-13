@@ -316,11 +316,11 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    vofa.val[0]=geo->s;
-    vofa.val[1]=geo->ds;
+    // vofa.val[0]=geo->s;
+    // vofa.val[1]=geo->ds;
 
-    vofa.val[2]=geo->phi;
-    vofa.val[3]=geo->dphi;
+    // vofa.val[2]=geo->phi;
+    // vofa.val[3]=geo->dphi;
 
     vofa.val[4]=geo->th_ll;
     vofa.val[5]=geo->dth_ll;
@@ -334,6 +334,13 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // vofa.val[8]=geo->th_b;
     // vofa.val[9]=geo->dth_b;
+
+    vofa.val[0]=motors.wheel_L.speed*RPMtoRADS;
+    vofa.val[1]=motors.wheel_R.speed*RPMtoRADS;
+
+    vofa.val[2]=motors.joint_LF.torque_actual;
+    vofa.val[3]=motors.joint_LB.torque_actual;
+
     vofa.val[8]=geo->T_LF;
     vofa.val[9]=geo->T_LB;
 

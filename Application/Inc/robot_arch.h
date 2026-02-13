@@ -17,6 +17,23 @@
     
     #ifdef CONFIG_ROBOT_HERO
         // GIMBAL + HERO configuration
+        typedef struct robot_motors_t{
+            report_M3508_t flywheel_1; // ID = 1
+            report_M3508_t flywheel_2; // ID = 2
+            report_M3508_t flywheel_3; // ID = 3
+
+            report_M2006_t feeder_top; // ID = 4
+
+        }robot_motors_t;
+
+        typedef struct robot_ctrl_t{ // All units SI, unless specified.
+            float feeder_position;
+            float feeder_vel;
+
+            float target_flywheel_rpm; // RPM
+            float target_feeder_vel;
+            float target_feeder_position;
+        }robot_ctrl_t;
     #endif
     
     #ifdef CONFIG_ROBOT_AIMING_BENCH
