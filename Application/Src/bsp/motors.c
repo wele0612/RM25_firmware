@@ -86,6 +86,8 @@ uint8_t* set_current_M3508(uint8_t *buf, \
     uint16_t m4_current_ = (int16_t)(m4_current*m3508_current_to_int);
     buf[6] = m4_current_ >> 8;
     buf[7] = m4_current_ & 0x00ff;
+
+    return buf;
 }
 
 void parse_feedback_M3508(uint8_t *msg, report_M3508_t *rpt){
@@ -136,7 +138,8 @@ static uint8_t *set_MIT_DM_joint(uint8_t *buf, float position,
                         float velocity, float torque, const float kp,
                         const float kd, const float T_MAX) {
 
-    *(uint64_t*)buf = 0x0;
+
+    memset(buf, 0x0, 8);
 
     position = constrain(position, P_MIN, P_MAX);
     velocity = constrain(velocity, V_MIN, V_MAX);
@@ -296,15 +299,15 @@ void parse_feedback_M0603A(uint8_t *msg, report_M0603A_t *rpt){
 /* ============= P1010B-111 ============= */
 
 uint8_t* enable_P1010B(uint8_t *buf){
-    *(uint64_t*)buf = 0x0202020202020202;
+    memset(buf, 0x02, 8);
     return buf;
 }
 uint8_t* disable_P1010B(uint8_t *buf){
-    *(uint64_t*)buf = 0x0101010101010101;
+    memset(buf, 0x01, 8);
     return buf;
 }
 uint8_t* error_eliminate_P1010B(uint8_t *buf, uint8_t id, uint16_t errormask){
-    *(uint64_t*)buf = 0x0;
+    memset(buf, 0x0, 8);
     buf[0] = id;
     buf[1] = P1010B_PARAMID_ERROR_ELIMINATE;
     buf[2] = errormask & 0x00ff;
@@ -312,14 +315,14 @@ uint8_t* error_eliminate_P1010B(uint8_t *buf, uint8_t id, uint16_t errormask){
     return buf;
 }
 uint8_t* enable_heartbeat_P1010B(uint8_t *buf, uint8_t id, uint8_t enabled){
-    *(uint64_t*)buf = 0x0;
+    memset(buf, 0x0, 8);
     buf[0] = id;
     buf[1] = P1010B_PARAMID_HEARTBEAT_ENABLE;
     buf[2] = enabled;
     return buf;
 }
 uint8_t* set_heartbeat_timeout_P1010B(uint8_t *buf, uint8_t id, int16_t time_ms){
-    *(uint64_t*)buf = 0x0;
+    memset(buf, 0x0, 8);
     buf[0] = id;
     buf[1] = P1010B_PARAMID_HEARTBEAT_TIMEOUT;
     buf[3] = time_ms >> 8;
@@ -397,7 +400,7 @@ uint8_t* set_torque_M1505B(uint8_t *buf, \
 }
 
 uint8_t* set_feedback_mode_M1505B(uint8_t* buf, uint8_t is_active, uint8_t period_ms){
-    *(uint64_t*)buf = 0x0;
+    memset(buf, 0x0, 8);
 
     uint8_t feedback = 0;
     if (is_active){

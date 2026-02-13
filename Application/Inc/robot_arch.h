@@ -87,6 +87,9 @@
 
             float lqr_err[10];
 
+            float J_l[4];
+            float J_r[4];
+
             // Same, but relative to robot body coordinate system: Does not consider th_b
             float th_ll_nb; // left leg - ground angle, positive when wheel is behind the body
             float dth_ll_nb; // derivative of th_ll
@@ -108,13 +111,14 @@
             float T_RF;
             float T_RB;
 
+            float F_wheel_support; // total supporting force from the joint
+
             float target_ds;
             float target_phi;
             float target_dphi;
             float target_th_ll;
             float target_th_lr;
             float target_b_height;
-            
 
             float target_L_length;
             float target_R_length;

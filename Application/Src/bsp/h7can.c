@@ -34,11 +34,22 @@ void can_filter_init(void)
 	fdcan_filter.FilterType = FDCAN_FILTER_MASK;
 	fdcan_filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
 	fdcan_filter.FilterID1 = 0x00000000; // Accept all ID
-	fdcan_filter.FilterID2 = 0x00000000;
+	fdcan_filter.FilterID2 = 0x00000000; // Mask = 0，接收所有
 
-	HAL_FDCAN_ConfigFilter(&hfdcan1,&fdcan_filter);
+	// 配置 FDCAN1
+	HAL_FDCAN_ConfigFilter(&hfdcan1, &fdcan_filter);
 	HAL_FDCAN_ConfigGlobalFilter(&hfdcan1, FDCAN_REJECT, FDCAN_REJECT, FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE);
 	HAL_FDCAN_ConfigFifoWatermark(&hfdcan1, FDCAN_CFG_RX_FIFO0, 1);
+
+	// 配置 FDCAN2
+	HAL_FDCAN_ConfigFilter(&hfdcan2, &fdcan_filter);
+	HAL_FDCAN_ConfigGlobalFilter(&hfdcan2, FDCAN_REJECT, FDCAN_REJECT, FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE);
+	HAL_FDCAN_ConfigFifoWatermark(&hfdcan2, FDCAN_CFG_RX_FIFO0, 1);
+
+	// 配置 FDCAN3
+	HAL_FDCAN_ConfigFilter(&hfdcan3, &fdcan_filter);
+	HAL_FDCAN_ConfigGlobalFilter(&hfdcan3, FDCAN_REJECT, FDCAN_REJECT, FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE);
+	HAL_FDCAN_ConfigFifoWatermark(&hfdcan3, FDCAN_CFG_RX_FIFO0, 1);
 }
 /**
 ************************************************************************

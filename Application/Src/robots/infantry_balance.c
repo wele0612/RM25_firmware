@@ -32,9 +32,9 @@ static const float d4 = 94.5e-3f;
 
 static inline void forward_kinetics_jacobian(
                             float theta1, float theta2, 
-                            float * restrict L, 
-                            float * restrict theta, 
-                            float * restrict J){
+                            float * L, 
+                            float * theta, 
+                            float * J){
 
     float alpha = (theta1 + theta2) * 0.5f;
     float sin_a = sinf(alpha);
@@ -144,7 +144,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // float wheel_l_T = pid_cycle(&wheel_l_vel_calib_pit, target_wheel_vel - motors.wheel_L.speed, CTRL_DELTA_T);
     // float wheel_r_T = pid_cycle(&wheel_r_vel_calib_pit, target_wheel_vel - motors.wheel_R.speed, CTRL_DELTA_T); 
 
-    float J_l[4], J_r[4];
+    // static float J_l[4], J_r[4];
     const float left_th1 = motors.joint_LF.position + (PI/2); 
     const float left_th2 = -motors.joint_LB.position + (PI/2);
     const float right_th1 = -motors.joint_RF.position + (PI/2); 
@@ -176,14 +176,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->dphi = -imu_data.gyro[2]*DEGtoRAD;
 
     if(HAL_GetTick()%2==0){
-        forward_kinetics_jacobian(left_th1, left_th2, &geo->L_l, &geo->th_ll_nb, J_l);
-        geo->dL_l = J_l[0]*left_dth1 + J_l[2]*left_dth2;
-        geo->dth_ll_nb = -(J_l[1]*left_dth1 + J_l[3]*left_dth2);
-
+        forward_kinetics_jacobian(left_th1, left_th2, &geo->L_l, &geo->th_ll_nb, geo->J_l);
+        geo->dL_l = geo->J_l[0]*left_dth1 + geo->J_l[2]*left_dth2;
+        geo->dth_ll_nb = -(geo->J_l[1]*left_dth1 + geo->J_l[3]*left_dth2);
     }else{
-        forward_kinetics_jacobian(right_th1, right_th2, &geo->L_r, &geo->th_lr_nb, J_r);
-        geo->dL_r = J_r[0]*right_dth1 + J_r[2]*right_dth2;
-        geo->dth_lr_nb = -(J_r[1]*right_dth1 + J_r[3]*right_dth2);
+        forward_kinetics_jacobian(right_th1, right_th2, &geo->L_r, &geo->th_lr_nb, geo->J_r);
+        geo->dL_r = geo->J_r[0]*right_dth1 + geo->J_r[2]*right_dth2;
+        geo->dth_lr_nb = -(geo->J_r[1]*right_dth1 + geo->J_r[3]*right_dth2);
     }
 
     // float thb_diff = (-imu_data.pitch - geo->th_b)*(1/CTRL_DELTA_T);
@@ -195,6 +194,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->th_lr = wrap_to_pi(geo->th_lr_nb +  geo->th_b);
     geo->dth_lr = geo->dth_lr_nb + geo->dth_b;
 
+    geo->F_wheel_support = (motors.joint_LF.torque_actual - motors.joint_LB.torque_actual) / (2.0f * geo->J_l[0]);
+
     // ================== Update target value =======================
 
     if(wbr_state == WBR_CONST_VEL){
@@ -205,9 +206,9 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     }else if(wbr_state == WBR_LQR_PREP){
         geo->target_L_length = 0.19f;
-        geo->target_L_leg_omega = limit_val(-3.0f*geo->th_ll_nb, 1.6f);
+        geo->target_L_leg_omega = limit_val(3.0f*(0.2f - geo->th_ll_nb), 1.6f);
         geo->target_R_length = 0.19f;
-        geo->target_R_leg_omega = limit_val(-3.0f*geo->th_lr_nb, 1.6f);
+        geo->target_R_leg_omega = limit_val(3.0f*(0.2f-geo->th_lr_nb), 1.6f);
 
         geo->target_phi = geo->phi;
 
@@ -296,13 +297,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     // ==================== Send to Motors =====================
 
     if(HAL_GetTick()%2==0){
-        geo->T_LF = J_l[0]*geo->Fnl + J_l[1]*geo->Tbll;
-        geo->T_LB = J_l[2]*geo->Fnl + J_l[3]*geo->Tbll;
+        geo->T_LF = geo->J_l[0]*geo->Fnl + geo->J_l[1]*geo->Tbll;
+        geo->T_LB = geo->J_l[2]*geo->Fnl + geo->J_l[3]*geo->Tbll;
         fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, geo->T_LF), 8);
         fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, -geo->T_LB), 8);
     }else{
-        geo->T_RF = -J_r[0]*geo->Fnr - J_r[1]*geo->Tblr;
-        geo->T_RB = -J_r[2]*geo->Fnr - J_r[3]*geo->Tblr;
+        geo->T_RF = -geo->J_r[0]*geo->Fnr - geo->J_r[1]*geo->Tblr;
+        geo->T_RB = -geo->J_r[2]*geo->Fnr - geo->J_r[3]*geo->Tblr;
         fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, geo->T_RF), 8);
         fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, -geo->T_RB), 8);
     }
@@ -325,23 +326,19 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[5]=geo->dth_ll;
 
     vofa.val[6]=geo->th_lr;
-    vofa.val[7]=geo->dth_lr;
+    // vofa.val[7]=geo->dth_lr;
+    // if(geo->F_wheel_support < 10.0f || geo->F_wheel_support>100.0f){
+        vofa.val[6]+=0.001f;
+    // }
+    vofa.val[7]=geo->F_wheel_support;
 
-    vofa.val[8]=geo->th_b;
-    vofa.val[9]=geo->dth_b;
+    // vofa.val[8]=geo->th_b;
+    // vofa.val[9]=geo->dth_b;
+    vofa.val[8]=geo->T_LF;
+    vofa.val[9]=geo->T_LB;
 
-    // vofa.val[3]=(float)dr16.s1;
-    // vofa.val[4]=wheel_dphi;
-    // vofa.val[5]=geo->yaw_f*RADtoDEG;
-    // vofa.val[6]=imu_data.gyro[2];
-    // vofa.val[6]=robot_geo.L_r;
-    // vofa.val[7]=robot_geo.L_l;
-
-    // vofa.val[8]=T_LF;
-    // vofa.val[9]=T_LB;
-
-    // vofa.val[8]=(float)dr16.s1;
-    // vofa.val[9]=(float)dr16.s2;
+    // vofa.val[8]=geo->F_wheel_support;
+    // vofa.val[9]=geo->Fnl;
     
 }
 
