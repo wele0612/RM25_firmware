@@ -922,6 +922,8 @@ void imu_update(){
 }
 
 void imu_obtain_data(imu_data_t *data){
+    __disable_irq();
     memcpy(data, &imu_clean, sizeof(imu_data_t));
+    __enable_irq();
     return;
 }

@@ -129,6 +129,11 @@ void role_controller_init(){
 void role_controller_step(const float CTRL_DELTA_T){
     uint8_t wheel_tx_buf[8];
     robot_ctrl_t *geo = &robot_geo;
+    robot_motors_t fmotor;
+
+    __disable_irq(); // Important Note: create a snapshot of all motor states.
+    fmotor = motors; 
+    __enable_irq();
 
     if(dr16.s1 == DR16_SWITCH_UP){
         wbr_state=WBR_CONST_VEL;
@@ -141,31 +146,31 @@ void role_controller_step(const float CTRL_DELTA_T){
     // geo->target_R_length = 0.2f;
 
     // const float target_wheel_vel = 3000.0f*dr16.channel[1];
-    // float wheel_l_T = pid_cycle(&wheel_l_vel_calib_pit, target_wheel_vel - motors.wheel_L.speed, CTRL_DELTA_T);
-    // float wheel_r_T = pid_cycle(&wheel_r_vel_calib_pit, target_wheel_vel - motors.wheel_R.speed, CTRL_DELTA_T); 
+    // float wheel_l_T = pid_cycle(&wheel_l_vel_calib_pit, target_wheel_vel - fmotor.wheel_L.speed, CTRL_DELTA_T);
+    // float wheel_r_T = pid_cycle(&wheel_r_vel_calib_pit, target_wheel_vel - fmotor.wheel_R.speed, CTRL_DELTA_T); 
 
     // static float J_l[4], J_r[4];
-    const float left_th1 = motors.joint_LF.position + (PI/2); 
-    const float left_th2 = -motors.joint_LB.position + (PI/2);
-    const float right_th1 = -motors.joint_RF.position + (PI/2); 
-    const float right_th2 = motors.joint_RB.position + (PI/2);
+    const float left_th1 = fmotor.joint_LF.position + (PI/2); 
+    const float left_th2 = -fmotor.joint_LB.position + (PI/2);
+    const float right_th1 = -fmotor.joint_RF.position + (PI/2); 
+    const float right_th2 = fmotor.joint_RB.position + (PI/2);
 
-    const float left_dth1 = -motors.joint_LF.speed;
-    const float left_dth2 = motors.joint_LB.speed;
-    const float right_dth1 = motors.joint_RF.speed;
-    const float right_dth2 = -motors.joint_RB.speed;
+    const float left_dth1 = -fmotor.joint_LF.speed;
+    const float left_dth2 = fmotor.joint_LB.speed;
+    const float right_dth1 = fmotor.joint_RF.speed;
+    const float right_dth2 = -fmotor.joint_RB.speed;
 
     float yaw_diff = imu_data.yaw - geo->yaw_m1;
     geo->yaw_m1 = imu_data.yaw;
     // Wheel distance: 430mm (?)
-    float wheel_dphi = (motors.wheel_R.speed + motors.wheel_L.speed)
+    float wheel_dphi = (fmotor.wheel_R.speed + fmotor.wheel_L.speed)
         *(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f/0.215f);
     if(fabsf(wheel_dphi) >= 0.005f || fabs(yaw_diff)>= 0.00002f){
         geo->yaw_f = wrap_to_pi(geo->yaw_f + yaw_diff);
     }    
 
     // Wheel size: 120mm
-    float ds = (motors.wheel_R.speed - motors.wheel_L.speed)*(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f);
+    float ds = (fmotor.wheel_R.speed - fmotor.wheel_L.speed)*(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f);
     const float ds_alpha = 0.2f;
     if(fabsf(geo->target_ds) < 0.1f){
         geo->s = limit_val(geo->s + CTRL_DELTA_T*(ds-geo->target_ds), geo->s_max);
@@ -194,7 +199,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->th_lr = wrap_to_pi(geo->th_lr_nb +  geo->th_b);
     geo->dth_lr = geo->dth_lr_nb + geo->dth_b;
 
-    geo->F_wheel_support = (motors.joint_LF.torque_actual - motors.joint_LB.torque_actual) / (2.0f * geo->J_l[0]);
+    geo->F_wheel_support = (fmotor.joint_LF.torque_actual - fmotor.joint_LB.torque_actual) / (2.0f * geo->J_l[0]);
 
     // ================== Update target value =======================
 
@@ -234,8 +239,8 @@ void role_controller_step(const float CTRL_DELTA_T){
             geo->Fnr = pid_cycle(&rightleg_length_pid, geo->target_R_length - geo->L_r, CTRL_DELTA_T*2);
             geo->Tblr = pid_cycle(&rightleg_dtheta_pid, wrap_to_pi(geo->target_R_leg_omega - geo->dth_lr_nb), CTRL_DELTA_T*2);
         }
-        geo->Twl = pid_cycle(&wheel_l_vel_calib_pit, - motors.wheel_L.speed, CTRL_DELTA_T);
-        geo->Twr = pid_cycle(&wheel_r_vel_calib_pit, - motors.wheel_R.speed, CTRL_DELTA_T);
+        geo->Twl = pid_cycle(&wheel_l_vel_calib_pit, - fmotor.wheel_L.speed, CTRL_DELTA_T);
+        geo->Twr = pid_cycle(&wheel_r_vel_calib_pit, - fmotor.wheel_R.speed, CTRL_DELTA_T);
     }else if(wbr_state == WBR_LQR){
         const float K_mat[4][10] = {
             {-0.40555f, -2.71021f, -0.71682f, -1.61511f, -7.35533f, -0.75944f, -5.93664f, -0.61676f, -5.34036f, -1.19106f},
@@ -291,21 +296,21 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->Twr = 0.0f;
     }
 
-    // geo->Twl += friction_compensation(motors.wheel_L.speed, 0.05f, (1/100.0f));
-    // geo->Twr += friction_compensation(motors.wheel_R.speed, 0.15f, (1/100.0f));
+    // geo->Twl += friction_compensation(fmotor.wheel_L.speed, 0.05f, (1/100.0f));
+    // geo->Twr += friction_compensation(fmotor.wheel_R.speed, 0.15f, (1/100.0f));
 
-    // ==================== Send to Motors =====================
+    // ==================== Send to fmotor =====================
 
     if(HAL_GetTick()%2==0){
         geo->T_LF = geo->J_l[0]*geo->Fnl + geo->J_l[1]*geo->Tbll;
         geo->T_LB = geo->J_l[2]*geo->Fnl + geo->J_l[3]*geo->Tbll;
-        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, geo->T_LF), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, -geo->T_LB), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(fmotor.joint_LF.tranmitbuf, geo->T_LF), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(fmotor.joint_LB.tranmitbuf, -geo->T_LB), 8);
     }else{
         geo->T_RF = -geo->J_r[0]*geo->Fnr - geo->J_r[1]*geo->Tblr;
         geo->T_RB = -geo->J_r[2]*geo->Fnr - geo->J_r[3]*geo->Tblr;
-        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, geo->T_RF), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, -geo->T_RB), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(fmotor.joint_RF.tranmitbuf, geo->T_RF), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(fmotor.joint_RB.tranmitbuf, -geo->T_RB), 8);
     }
 
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, \
@@ -335,11 +340,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[8]=geo->th_b;
     // vofa.val[9]=geo->dth_b;
 
-    vofa.val[0]=motors.wheel_L.speed*RPMtoRADS;
-    vofa.val[1]=motors.wheel_R.speed*RPMtoRADS;
+    vofa.val[0]=fmotor.wheel_L.speed*RPMtoRADS;
+    vofa.val[1]=fmotor.wheel_R.speed*RPMtoRADS;
 
-    vofa.val[2]=motors.joint_LF.torque_actual;
-    vofa.val[3]=motors.joint_LB.torque_actual;
+    vofa.val[2]=fmotor.joint_LF.torque_actual;
+    vofa.val[3]=fmotor.joint_LB.torque_actual;
+
+    vofa.val[4]=geo->ds;
+    vofa.val[5]=fmotor.wheel_L.current;
 
     vofa.val[8]=geo->T_LF;
     vofa.val[9]=geo->T_LB;
