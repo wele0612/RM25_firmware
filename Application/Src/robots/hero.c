@@ -11,25 +11,42 @@
 
 #ifdef CONFIG_PLATFORM_BASE
 
+void role_controller_init(){
+
+}
+
+void dr16_on_change(){
+    return;
+}
+
+void role_controller_step(const float CTRL_DELTA_T){
+    vofa.val[0]=(float)HAL_GetTick();
+}
+
+
+void robot_CAN_msgcallback(int ID, uint8_t *msg){
+    return;
+}
+
 #endif 
 #ifdef CONFIG_PLATFORM_GIMBAL
 
 PID_t flywheel_1_pid={
-    .P=0.01f,
+    .P=0.007f,
     .I=0.05f,
     .D=0.000005f,
     .integral_max=20.0f
 };
 
 PID_t flywheel_2_pid={
-    .P=0.01f,
+    .P=0.007f,
     .I=0.05f,
     .D=0.000005f,
     .integral_max=20.0f
 };
 
 PID_t flywheel_3_pid={
-    .P=0.01f,
+    .P=0.007f,
     .I=0.05f,
     .D=0.000005f,
     .integral_max=20.0f
@@ -66,7 +83,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     if(dr16.s1 == DR16_SWITCH_UP){
         geo->target_flywheel_rpm = 4300.0f;
     }else if((dr16.s1 == DR16_SWITCH_MID)){
-        geo->target_flywheel_rpm = 1500.0f;
+        geo->target_flywheel_rpm = 1000.0f;
     }else{
         geo->target_flywheel_rpm = 0.0f;
     }
@@ -77,6 +94,10 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_feeder_vel = 3.14f;
     }
 
+    const float flywheel_alpha = 0.2f;
+    geo->f1vel_filtered = geo->f1vel_filtered*(1.0f - flywheel_alpha) + flywheel_alpha*fmotor.flywheel_1.speed;
+
+    // float Tfly_1 = pid_cycle(&flywheel_1_pid, -geo->target_flywheel_rpm - geo->f1vel_filtered, CTRL_DELTA_T);
     float Tfly_1 = pid_cycle(&flywheel_1_pid, -geo->target_flywheel_rpm - fmotor.flywheel_1.speed, CTRL_DELTA_T);
     float Tfly_2 = pid_cycle(&flywheel_2_pid, -geo->target_flywheel_rpm - fmotor.flywheel_2.speed, CTRL_DELTA_T);
     float Tfly_3 = pid_cycle(&flywheel_3_pid, geo->target_flywheel_rpm - fmotor.flywheel_3.speed, CTRL_DELTA_T);
@@ -101,15 +122,19 @@ void role_controller_step(const float CTRL_DELTA_T){
         Tfeeder_1*(1/M2006_TORQUE_CONSTANT)
     ), 8);
 
-    vofa.val[0]=fmotor.flywheel_1.speed;
-    vofa.val[1]=fmotor.flywheel_2.speed;
+    vofa.val[0]=-fmotor.flywheel_1.speed;
+    vofa.val[1]=-fmotor.flywheel_2.speed;
     vofa.val[2]=fmotor.flywheel_3.speed;
     vofa.val[3]=geo->feeder_vel;
 
-    vofa.val[4]=geo->feeder_position;
-    vofa.val[5]=Tfeeder_1;
+    vofa.val[4]=Tfeeder_1;
 
+    vofa.val[5]=-fmotor.flywheel_1.current;
+    vofa.val[6]=-fmotor.flywheel_2.current;
+    vofa.val[7]=fmotor.flywheel_3.current;
+    vofa.val[8]=referee.shoot_data_0x0207.initial_speed;
 
+    vofa.val[9]=fmotor.flywheel_1.tempreture;
 }
 
 

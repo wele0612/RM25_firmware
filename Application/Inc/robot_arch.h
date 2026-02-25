@@ -148,10 +148,18 @@
     
     #ifdef CONFIG_ROBOT_INFANTRY_OMNI
         // BASE + INFANTRY_OMNI configuration
+        
     #endif
     
     #ifdef CONFIG_ROBOT_HERO
         // BASE + HERO configuration
+        typedef struct robot_motors_t{
+
+        }robot_motors_t;
+
+        typedef struct robot_ctrl_t{
+ 
+        }robot_ctrl_t;
     #endif
     
     #ifdef CONFIG_ROBOT_AIMING_BENCH

@@ -2,7 +2,6 @@
 #include<application.h>
 #ifdef CONFIG_PLATFORM_GIMBAL
 
-
 void controller_init(){
     role_controller_init();
 }
