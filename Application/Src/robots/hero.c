@@ -95,7 +95,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
 
     const float flywheel_alpha = 0.2f;
-    geo->f1vel_filtered = geo->f1vel_filtered*(1.0f - flywheel_alpha) + flywheel_alpha*fmotor.flywheel_1.speed;
+    // geo->f1vel_filtered = geo->f1vel_filtered*(1.0f - flywheel_alpha) + flywheel_alpha*fmotor.flywheel_1.speed;
 
     // float Tfly_1 = pid_cycle(&flywheel_1_pid, -geo->target_flywheel_rpm - geo->f1vel_filtered, CTRL_DELTA_T);
     float Tfly_1 = pid_cycle(&flywheel_1_pid, -geo->target_flywheel_rpm - fmotor.flywheel_1.speed, CTRL_DELTA_T);
