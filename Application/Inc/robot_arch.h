@@ -86,6 +86,9 @@
             float yaw_f; // Draft-removed yaw with wheel motion
             float yaw_m1; // Yaw of last cycle
 
+            float b_height;
+            float roll;
+
             float L_l;
             float L_r;
             float dL_l;
@@ -135,7 +138,9 @@
             float target_dphi;
             float target_th_ll;
             float target_th_lr;
+
             float target_b_height;
+            float target_roll;
 
             float target_L_length;
             float target_R_length;

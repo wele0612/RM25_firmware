@@ -180,6 +180,11 @@ static void parse_feedback_DM_Joint(uint8_t *msg, report_DM_Joint_t *rpt, uint8_
         return;
     }
 
+    if((msg[0] & 0xf0) != 0x10){
+        volatile int i = 3;
+        i++;
+    }
+
     p_int = (msg[1] << 8) | msg[2];
     v_int = (msg[3] << 4) | (msg[4] >> 4);
     t_int = ((msg[4] & 0xF) << 8) | msg[5];
