@@ -10,7 +10,8 @@ void controller_cycle(const float CTRL_DELTA_T){
     role_controller_step(CTRL_DELTA_T);
 }
 
-
+// M3508 motor
+// DR16 remote controller
 
 void dr16_on_change(){
     

@@ -45,35 +45,89 @@ void role_controller_init(){
 
 void role_controller_step(const float CTRL_DELTA_T){
     uint8_t tx_buffer[8]; 
-    const float wheel_radius = 0.154f;
+    const float wheel_radius = 0.075f;
 
     const float target_rpm_coe = 60.0f/(2*PI*wheel_radius)*(1/M3508_GEAR_RATIO);
 
+
+
     robot_geo.target_speed_x = target_rpm_coe*dr16.channel[0]*1.0f;
     robot_geo.target_speed_y = target_rpm_coe*dr16.channel[1]*1.0f;
-    robot_geo.target_omega_yaw = 500.0f*dr16.channel[2];
+    robot_geo.target_omega_yaw = 500.0f*dr16.channel[2]; // this is 0.5 rad/s (actual) * 1000 = target rpm in setting
+    
+
+    if (dr16.channel[0] > 0.5f) {
+        robot_geo.target_speed_x = target_rpm_coe*1.0f;
+        robot_geo.target_speed_y = 0.0f;
+        robot_geo.target_omega_yaw = 0.0f;
+    } else if (dr16.channel[0] < -0.5f) {
+        robot_geo.target_speed_x = target_rpm_coe*(-1.0f);
+        robot_geo.target_speed_y = 0.0f;
+        robot_geo.target_omega_yaw = 0.0f;
+    } else if (dr16.channel[1] > 0.5f) {
+        robot_geo.target_speed_x = 0.0f;
+        robot_geo.target_speed_y = target_rpm_coe*1.0f;
+        robot_geo.target_omega_yaw = 0.0f;
+    } else if (dr16.channel[1] < -0.5f) {
+        robot_geo.target_speed_x = 0.0f;
+        robot_geo.target_speed_y = target_rpm_coe*(-1.0f);
+        robot_geo.target_omega_yaw = 0.0f;
+    } else if (dr16.channel[2] > 0.5f) {
+        robot_geo.target_speed_x = 0.0f;
+        robot_geo.target_speed_y = 0.0f;
+        robot_geo.target_omega_yaw = 3141.5926f;
+    } else if (dr16.channel[2] < -0.5f) {
+        robot_geo.target_speed_x = 0.0f;
+        robot_geo.target_speed_y = 0.0f;
+        robot_geo.target_omega_yaw = -3141.5926f;
+    } else {
+        robot_geo.target_speed_x = 0.0f;
+        robot_geo.target_speed_y = 0.0f;
+        robot_geo.target_omega_yaw = 0.0f;
+    }
+
+    // float target_rpm_lf = 0.0f;
+    // float target_rpm_lb = 0.0f;
+    // float target_rpm_rf = 0.0f;
+    // float target_rpm_rb = 0.0f;
 
     const float target_rpm_lf=robot_geo.target_speed_y + robot_geo.target_speed_x + robot_geo.target_omega_yaw; 
     const float target_rpm_lb=robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;
     const float target_rpm_rf=-robot_geo.target_speed_y + robot_geo.target_speed_x + robot_geo.target_omega_yaw;
-    const float target_rpm_rb=-robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;   
+    const float target_rpm_rb=-robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;
+    
+  
+
+    
 
     float motor_lf_err=target_rpm_lf-motors.wheel_LF.speed;
     float motor_lb_err=target_rpm_lb-motors.wheel_LB.speed;
     float motor_rf_err=target_rpm_rf-motors.wheel_RF.speed;
     float motor_rb_err=target_rpm_rb-motors.wheel_RB.speed;
-    const float lf_torque = pid_cycle(&single_LF_wheel_velocity_pid, motor_lf_err, CTRL_DELTA_T);
-    const float lb_torque = pid_cycle(&single_LB_wheel_velocity_pid, motor_lb_err, CTRL_DELTA_T);
-    const float rf_torque = pid_cycle(&single_RF_wheel_velocity_pid, motor_rf_err, CTRL_DELTA_T);
-    const float rb_torque = pid_cycle(&single_RB_wheel_velocity_pid, motor_rb_err, CTRL_DELTA_T);
+    // const float lf_current = pid_cycle(&single_LF_wheel_velocity_pid, motor_lf_err, CTRL_DELTA_T) / 0.3f;
+    // * 0.1f for debug 
+    const float lf_current = pid_cycle(&single_LF_wheel_velocity_pid, motor_lf_err, CTRL_DELTA_T) / 0.3f;
+    const float lb_current = pid_cycle(&single_LB_wheel_velocity_pid, motor_lb_err, CTRL_DELTA_T) / 0.3f;
+    const float rf_current = pid_cycle(&single_RF_wheel_velocity_pid, motor_rf_err, CTRL_DELTA_T) / 0.3f;
+    const float rb_current = pid_cycle(&single_RB_wheel_velocity_pid, motor_rb_err, CTRL_DELTA_T) / 0.3f;
 
-    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_torque_M3508(tx_buffer,\
-        lf_torque, lb_torque, rf_torque, rb_torque), 8);
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buffer,\
+        lf_current, lb_current, rf_current, rb_current), 8);
 
-    vofa.val[0]=imu_data.yaw;
-    vofa.val[1]=imu_data.pitch;
-    vofa.val[2]=imu_data.gyro[2];
-    vofa.val[3]=imu_data.gyro[1];
+    // vofa.val[0]=imu_data.yaw;
+    // vofa.val[1]=imu_data.pitch;
+    // vofa.val[2]=imu_data.gyro[2];
+    // vofa.val[3]=imu_data.gyro[1];
+
+    vofa.val[0]=motors.wheel_LF.speed * M3508_GEAR_RATIO * (2*PI*wheel_radius/60.0f);
+    vofa.val[1]=motors.wheel_LB.speed * M3508_GEAR_RATIO * (2*PI*wheel_radius/60.0f);
+    vofa.val[2]=motors.wheel_RF.speed * M3508_GEAR_RATIO * (2*PI*wheel_radius/60.0f);
+    vofa.val[3]=motors.wheel_RB.speed * M3508_GEAR_RATIO * (2*PI*wheel_radius/60.0f);
+
+    // vofa.val[0]=lf_current;
+    // vofa.val[1]=lb_current;
+    // vofa.val[2]=rf_current;
+    // vofa.val[3]=rb_current;
 
     vofa.val[4]=dr16.channel[0];
     vofa.val[5]=dr16.channel[1];

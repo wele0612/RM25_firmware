@@ -249,7 +249,7 @@ void robot_step(const float CTRL_DELTA_T){
 
     imu_obtain_data(&imu_data);
 
-    controller_cycle(CTRL_DELTA_T);
+    role_controller_step(CTRL_DELTA_T);
 
     HAL_UART_Transmit_DMA(&huart7, (void *)&vofa, sizeof(vofa));
 
