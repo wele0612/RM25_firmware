@@ -396,12 +396,12 @@ void role_controller_init(){
 
 void role_controller_step(const float CTRL_DELTA_T){
 
-    vofa.val[0]=motors.pitch.position;
-    vofa.val[1]=motors.pitch.speed;
-    vofa.val[2]=motors.pitch.torque_actual;
-    vofa.val[3]=target_pitch_omega;
-    vofa.val[4]=pitch_omega_error;
-    vofa.val[5]=pitch_torque;
+    uint8_t tx_buffer[8];
+    fdcanx_send_data(&hfdcan2, 0x200, set_current_M3508(tx_buffer, 0.3f, 0.0f, 0.0f, 0.0f), 8);
+
+    // vofa.val[0]=motors.pitch.position;
+    // vofa.val[1]=motors.pitch.speed;
+    // vofa.val[2]=motors.pitch.torque_actual;
 }
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){

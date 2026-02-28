@@ -9,6 +9,17 @@
 #ifdef CONFIG_PLATFORM_GIMBAL
     #ifdef CONFIG_ROBOT_INFANTRY_BALANCE
         // GIMBAL + INFANTRY_BALANCE configuration
+        typedef struct robot_motors_t{
+            report_M3508_t wheel_left;
+            report_M3508_t wheel_right;
+
+        }robot_motors_t;
+
+        typedef struct robot_ctrl_t{
+            float target_rpm_left;
+            float target_rpm_right;
+        }robot_ctrl_t;
+        
     #endif
     
     #ifdef CONFIG_ROBOT_INFANTRY_OMNI
