@@ -903,9 +903,13 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     const float b[4] = {0.007820208033497193f, 0.015640416066994386f, 0.007820208033497193f, 0.0f};
 
     // %5 interrupt time
-    for(int i=0;i<sizeof(imu_data_t)/4;i++){
-        imu_clean_f[i]=filter_iir_eval(&iir[i], imu_f[i], 2, a, b);
+    for(int i=0;i<3;i++){ // DO NOT filter Pitch, Yaw and Roll due to Warp-to-PI
+        imu_clean->acc[i]=filter_iir_eval(&iir[i], imu->acc[i], 2, a, b);
+        imu_clean->gyro[i]=filter_iir_eval(&iir[i], imu->gyro[i], 2, a, b);
     }
+    imu_clean->pitch = imu->pitch;
+    imu_clean->yaw = imu->yaw;
+    imu_clean->roll = imu->roll;
 
     return 0;
 }
