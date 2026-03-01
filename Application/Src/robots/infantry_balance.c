@@ -390,23 +390,106 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
 #else
 
 
+PID_t left_wheel={
+    .P=0.007f,
+    .I=0.05f,
+    .D=0.000005f,
+    .integral_max=20.0f
+};
+
+PID_t right_wheel={
+    .P=0.007f,
+    .I=0.05f,
+    .D=0.000005f,
+    .integral_max=20.0f
+};
+
+PID_t pitch_omega_pid={
+    .P=0.008f,
+    .I=0.0f,
+    .D=0.00f,
+    .integral_max=0.01f
+};
+
+PID_t pitch_pos_pid={
+    .P=17.0f,
+    .I=0.0f,
+    .D=0.00f,
+    .integral_max=0.01f
+};
+
 // 0x0F is CAN(Slave) and 0x00 is Master
 void role_controller_init(){
+    HAL_Delay(1000);
+    uint8_t buffer[8];
+    enable_DM_Joint(buffer);
+    fdcanx_send_data(&hfdcan3, 0x0D, buffer, 8);
 }
 
+
+// left with positive rpm value and rigth with negative rpm value
 void role_controller_step(const float CTRL_DELTA_T){
 
-    uint8_t tx_buffer[8];
-    fdcanx_send_data(&hfdcan2, 0x200, set_current_M3508(tx_buffer, 0.3f, 0.0f, 0.0f, 0.0f), 8);
+    // set with target rpm
+    float target_left_rpm = 50.0f;
+    float target_right_rpm = -50.0f;
 
-    // vofa.val[0]=motors.pitch.position;
-    // vofa.val[1]=motors.pitch.speed;
-    // vofa.val[2]=motors.pitch.torque_actual;
+    // find error
+    float left_rpm_err = target_left_rpm - motors.wheel_left.speed;
+    float right_rpm_err = target_right_rpm - motors.wheel_right.speed;
+    
+    // apply pid:
+    float left_current = pid_cycle(&left_wheel, left_rpm_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
+    float right_current = pid_cycle(&right_wheel, right_rpm_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
+
+    // apply to motor:
+    uint8_t tx_buffer[8];
+    fdcanx_send_data(&hfdcan2, 0x200, set_current_M3508(tx_buffer, left_current, right_current, 0.0f, 0.0f), 8);
+
+    // check for DM4310:
+
+
+    float target_speed_pitch = 0.0f;
+
+    if (dr16.channel[0] > 0.5f) {
+        target_speed_pitch = 0.5f;
+    } else if (dr16.channel[0] < -0.5f) {
+        target_speed_pitch = - 0.5f;
+    } else {
+        target_speed_pitch = 0.0f;
+    }
+
+    float pitch_speed_err = target_speed_pitch - motors.motor_pitch.speed;
+    float pitch_torque = pid_cycle(&pitch_omega_pid, pitch_speed_err, CTRL_DELTA_T);
+
+    
+    fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(tx_buffer, pitch_torque), 8);
+
+    // print speed
+    vofa.val[0]=motors.wheel_left.speed;
+    vofa.val[1]=motors.wheel_right.speed;
+
+    // print current
+    vofa.val[2]=motors.wheel_left.current;
+    vofa.val[3]=motors.wheel_right.current;
+
+    // pid for speed ring
+    vofa.val[4]=target_speed_pitch;
+    vofa.val[5]=motors.motor_pitch.speed;
+    
 }
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){
     switch (ID){
-    case 0x0:
+        case 0x201:
+            parse_feedback_M3508(msg, &motors.wheel_left);
+            break;
+        case 0x202:
+            parse_feedback_M3508(msg, &motors.wheel_right);
+            break;
+        case 0x06:
+            parse_feedback_DM4310(msg, &motors.motor_pitch, 0x0D);
+            break;
 
     default:
         break;

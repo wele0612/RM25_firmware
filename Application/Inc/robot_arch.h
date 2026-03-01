@@ -12,6 +12,7 @@
         typedef struct robot_motors_t{
             report_M3508_t wheel_left;
             report_M3508_t wheel_right;
+            report_DM4310_t motor_pitch;
 
         }robot_motors_t;
 
