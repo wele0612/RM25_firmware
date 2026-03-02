@@ -118,6 +118,9 @@
             float dth_lr_nb; // derivative of th_lr
 
             float s_max;
+
+            float wheel_thy_vel_L; // theory value of left wheel
+            float wheel_thy_vel_R; // theory value of right wheel
  
             // float 
             float Fnl; // leg noraml force (left), pointing outward

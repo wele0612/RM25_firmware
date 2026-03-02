@@ -142,11 +142,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    if(fmotor.joint_LB.torque_actual >= 4.0f){
-        volatile int i=0;
-        i+=1;
-    }
-
     if(dr16.s1 == DR16_SWITCH_UP){
         wbr_state=WBR_CONST_VEL;
     }else if(dr16.s1 == DR16_SWITCH_MID){
@@ -156,13 +151,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
     // wbr_state = WBR_STANDBY;
 
-    // geo->target_R_length = 0.2f;
-
-    // const float target_wheel_vel = 3000.0f*dr16.channel[1];
-    // float wheel_l_T = pid_cycle(&wheel_l_vel_calib_pit, target_wheel_vel - fmotor.wheel_L.speed, CTRL_DELTA_T);
-    // float wheel_r_T = pid_cycle(&wheel_r_vel_calib_pit, target_wheel_vel - fmotor.wheel_R.speed, CTRL_DELTA_T); 
-
-    // static float J_l[4], J_r[4];
     const float left_th1 = fmotor.joint_LF.position + (PI/2); 
     const float left_th2 = -fmotor.joint_LB.position + (PI/2);
     const float right_th1 = -fmotor.joint_RF.position + (PI/2); 
@@ -176,8 +164,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     float yaw_diff = imu_data.yaw - geo->yaw_m1;
     geo->yaw_m1 = imu_data.yaw;
     // Wheel distance: 430mm (?)
+    const float wheel_distance_half = 0.215f;
     float wheel_dphi = (fmotor.wheel_R.speed + fmotor.wheel_L.speed)
-        *(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f/0.215f);
+        *(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f/wheel_distance_half);
+    
     if(fabsf(wheel_dphi) >= 0.005f || fabs(yaw_diff)>= 0.00002f){
         geo->yaw_f = wrap_to_pi(geo->yaw_f + yaw_diff);
     }    
@@ -185,7 +175,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // Wheel size: 120mm
     float ds = (fmotor.wheel_R.speed - fmotor.wheel_L.speed)*(RPMtoRADS*0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f);
     const float ds_alpha = 0.2f;
-    if(fabsf(geo->target_ds) < 0.1f){
+    if(fabsf(geo->target_ds) < 0.05f){
         geo->s = limit_val(geo->s + CTRL_DELTA_T*(ds-geo->target_ds), geo->s_max);
     }
 
@@ -238,8 +228,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     }else if(wbr_state == WBR_LQR){
         geo->target_b_height = 0.22f;
 
-        geo->target_th_ll = 3.5f*DEGtoRAD;
-        geo->target_th_lr = 3.5f*DEGtoRAD;
+        geo->target_th_ll = 5.5f*DEGtoRAD;
+        geo->target_th_lr = 5.5f*DEGtoRAD;
 
         geo->target_ds = dr16.channel[1]*1.1f;
         geo->target_dphi = -dr16.channel[0]*5.0f;
@@ -247,6 +237,11 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_phi_diff = limit_val(geo->target_phi_diff, 1.0f);
 
         geo->target_roll = dr16.channel[2]*0.15f;
+
+        // float wheel_thy_vel_ds = geo->target_ds * (1.0f/(0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f));
+        float wheel_thy_vel_dphi = geo->dphi * wheel_distance_half*(1.0f/(0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f));
+        geo->wheel_thy_vel_L = wheel_thy_vel_dphi;
+        geo->wheel_thy_vel_R = wheel_thy_vel_dphi;
     }
 
     // ==================== Update Controllers =====================
@@ -298,7 +293,7 @@ void role_controller_step(const float CTRL_DELTA_T){
             geo->Tblr += K_mat[3][i]*geo->lqr_err[i];
         }
 
-        geo->L_diff = pid_cycle(&body_roll_pid, geo->target_roll - geo->roll, CTRL_DELTA_T);
+        // geo->L_diff = pid_cycle(&body_roll_pid, geo->target_roll - geo->roll, CTRL_DELTA_T);
         geo->L_diff = limit_val(geo->L_diff, 0.05f);
         geo->target_L_length = geo->target_b_height + geo->L_diff;
         geo->target_R_length = geo->target_b_height - geo->L_diff;
@@ -323,8 +318,10 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->Twl = 0.0f;
         geo->Twr = 0.0f;
     }
-    // geo->Twl += friction_compensation(fmotor.wheel_L.speed, 0.05f, (1/100.0f));
-    // geo->Twr += friction_compensation(fmotor.wheel_R.speed, 0.15f, (1/100.0f));
+
+    // Adjust friction compensation below based on experimental data.
+    geo->Twl += friction_compensation(fmotor.wheel_L.speed, 0.06f, (1/600.0f));
+    geo->Twr += friction_compensation(fmotor.wheel_R.speed, 0.13f, (1/600.0f));
 
     // ==================== Send to fmotor =====================
 
@@ -354,20 +351,23 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[2]=geo->phi;
     // vofa.val[3]=geo->dphi;
 
-    vofa.val[2]=geo->lqr_err[2];
-    vofa.val[3]=geo->lqr_err[3];
+    vofa.val[2]=geo->roll*RADtoDEG;
+    vofa.val[3]=geo->yaw_f*RADtoDEG;
 
     // vofa.val[4]=geo->th_ll;
     // vofa.val[5]=geo->dth_ll;
 
-    vofa.val[8]=geo->th_b;
+    vofa.val[8]=geo->th_b*RADtoDEG;
     vofa.val[9]=geo->dth_b;
 
-    vofa.val[4]=imu_data.roll;
-    vofa.val[5]=geo->roll;
+    vofa.val[4]=geo->wheel_thy_vel_L;
+    vofa.val[5]=motors.wheel_L.speed*RPMtoRADS;
 
-    vofa.val[6]=fmotor.joint_LF.torque_actual;
-    vofa.val[7]=fmotor.joint_LB.torque_actual;
+    vofa.val[6]=geo->wheel_thy_vel_R;
+    vofa.val[7]=motors.wheel_R.speed*RPMtoRADS;
+
+    // vofa.val[8]=motors.wheel_L.speed;
+    // vofa.val[9]=motors.wheel_R.speed;
 
     // vofa.val[8]=geo->L_diff;
     // vofa.val[9]=geo->b_height;
@@ -425,12 +425,12 @@ void role_controller_init(){
 
 void role_controller_step(const float CTRL_DELTA_T){
 
-    vofa.val[0]=motors.pitch.position;
+    vofa.val[0]=motors.pitch.position*RADtoDEG;
     vofa.val[1]=motors.pitch.speed;
     vofa.val[2]=motors.pitch.torque_actual;
-    vofa.val[3]=target_pitch_omega;
-    vofa.val[4]=pitch_omega_error;
-    vofa.val[5]=pitch_torque;
+    vofa.val[3]=imu_data.pitch*RADtoDEG;
+    vofa.val[4]=imu_data.roll;
+    vofa.val[5]=imu_data.yaw;
 }
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){
