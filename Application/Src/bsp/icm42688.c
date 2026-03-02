@@ -92,7 +92,7 @@ static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const f
             mahony->integralFB[1] += ki * error_y * dt;
             mahony->integralFB[2] += ki * error_z * dt;
             
-            #define INTEGRAL_LIMIT 2.0f
+            #define INTEGRAL_LIMIT 0.02f
             if(mahony->integralFB[0] > INTEGRAL_LIMIT) mahony->integralFB[0] = INTEGRAL_LIMIT;
             else if(mahony->integralFB[0] < -INTEGRAL_LIMIT) mahony->integralFB[0] = -INTEGRAL_LIMIT;
             if(mahony->integralFB[1] > INTEGRAL_LIMIT) mahony->integralFB[1] = INTEGRAL_LIMIT;
