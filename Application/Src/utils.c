@@ -36,16 +36,49 @@ float friction_compensation(float omega, const float coulomb_torque, const float
     }
 }
 
+#ifndef PI_F
+#define PI_F 3.14159265358979323846f
+#endif
+
+#ifndef TWO_PI_F  
+#define TWO_PI_F 6.28318530717958647692f
+#endif
+
+/**
+ * 将弧度限制在 (-π, π] 区间
+ */
 inline float wrap_to_pi(float rad) {
-    while (rad >  3.14159265f) rad -= 6.28318530718f;
-    while (rad < -3.14159265f) rad += 6.28318530718f;
-    return rad;
+    if (!isfinite(rad)) {
+        return 0.0f; 
+    }
+    
+    rad = fmodf(rad + PI_F, TWO_PI_F);
+    
+    if (rad <= 0.0f) {
+        rad += TWO_PI_F;
+    }
+    
+    return rad - PI_F;  // 映射回 (-π, π]
 }
 
+/**
+ * 将弧度限制在 [0, 2π) 区间  
+ */
 inline float wrap_to_2pi(float rad) {
-    const float two_pi = 6.28318530718f;
-    while (rad >= two_pi) rad -= two_pi;
-    while (rad < 0.0f) rad += two_pi;
+    if (!isfinite(rad)) {
+        return 0.0f;
+    }
+    
+    rad = fmodf(rad, TWO_PI_F);
+    
+    if (rad < 0.0f) {
+        rad += TWO_PI_F;
+    }
+    
+    if (rad >= TWO_PI_F) {
+        rad -= TWO_PI_F;
+    }
+    
     return rad;
 }
 
