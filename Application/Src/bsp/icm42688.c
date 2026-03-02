@@ -353,7 +353,8 @@ int icm_init(){
         return -1;
     }
     intf_config1 |= 0x04; // 设置RTC_MODE位为1
-    intf_config1 &= ~0x03; // CLKSEL设置为00 (使用内部RC振荡器，但RTC模式会使用外部时钟)
+    intf_config1 &= ~0x03; // 清除bits 1:0
+    intf_config1 |= 0x01;  // CLKSEL = 01 (PLL/RC自动选择 - 使用外部时钟)
     if(icm_write_byte(ICM42688_INTF_CONFIG1, intf_config1) != 0) {
         return -1;
     }
@@ -597,7 +598,8 @@ int icm_read_all_data_dma(float accel_data[3], float gyro_data[3])
     gyro_raw[2] = (int16_t)((buffer[10] << 8) | buffer[11]);
 
     // --- 转换为物理单位 ---
-    const float accel_sensitivity = 2048.0f; // ±16g
+    // const float accel_sensitivity = 2048.0f; // ±16g
+    const float accel_sensitivity = 1024.0f; // ±16g
     const float gyro_sensitivity  = 16.4f;   // ±2000 dps
 
     accel_data[0] = accel_raw[0] / accel_sensitivity;
