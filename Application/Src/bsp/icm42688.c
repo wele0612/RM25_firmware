@@ -37,15 +37,13 @@ typedef struct {
 static MahonyAHRS ahrs;
 
 // ---------- Mahony init (call once in icm_init) ----------
-static inline void Mahony_Init(MahonyAHRS *mahony, float Kp, float Ki) {
-    (void)Kp; (void)Ki;
+static inline void Mahony_Init(MahonyAHRS *mahony) {
 
     mahony->q[0]=1.0f; mahony->q[1]=mahony->q[2]=mahony->q[3]=0.0f;
     mahony->integralFB[0]=mahony->integralFB[1]=mahony->integralFB[2]=0.0f;
 
-    // Tuned values: somewhat aggressive but with HF suppression and smooth boost
-    mahony->Kp = 3.5f;             // base proportional gain original 3.5
-    mahony->Ki = 0.02f;            // small integral original 0.02
+    mahony->Kp = 1.0f;       
+    mahony->Ki = 0.01f;
 
     mahony->roll = mahony->pitch = mahony->yaw = 0.0f;
 }
@@ -53,114 +51,92 @@ static inline void Mahony_Init(MahonyAHRS *mahony, float Kp, float Ki) {
 static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const float gyro[3], float dt){
     float normalizedValue;
     float copy_acc[3], copy_gyro[3];
-    copy_acc[0] = acc[0]; // x
-    copy_acc[1] = acc[1]; // y
-    copy_acc[2] = acc[2]; // z
-    copy_gyro[0] = gyro[0];
-    copy_gyro[1] = gyro[1];
-    copy_gyro[2] = gyro[2];
+    copy_acc[0] = acc[0]; copy_acc[1] = acc[1]; copy_acc[2] = acc[2];
+    copy_gyro[0] = gyro[0]; copy_gyro[1] = gyro[1]; copy_gyro[2] = gyro[2];
     float theory_gx, theory_gy, theory_gz;
     float q0 = mahony->q[0], q1 = mahony->q[1], q2 = mahony->q[2], q3 = mahony->q[3];
     float qa, qb, qc;
     float error_x, error_y, error_z;
     float acc_norm_sq;
+    float kp, ki;  // effective gains
 
-    // only when the accleration data is valid then do calculation:
     acc_norm_sq = acc[0]*acc[0] + acc[1]*acc[1] + acc[2]*acc[2];
+    
+    // Adaptive gain: boost PI when static (near 1g & low rotation) for faster bias convergence
+    float gain_mul = 1.0f;
     if(acc_norm_sq > 0.0001f){
-        // normalized the measured acceleration vector
+        float acc_norm = sqrtf(acc_norm_sq);
+        float gyro_norm = sqrtf(gyro[0]*gyro[0] + gyro[1]*gyro[1] + gyro[2]*gyro[2]);
+        if(fabsf(acc_norm - 1.0f) < 0.15f && gyro_norm < 0.1f) gain_mul = 5.0f; // 3x gain when steady
+    }
+    kp = mahony->Kp * gain_mul;
+    ki = mahony->Ki * gain_mul;
+
+    if(acc_norm_sq > 0.0001f){
         normalizedValue = 1.0f/sqrtf(acc_norm_sq);
         copy_acc[0] *= normalizedValue; 
         copy_acc[1] *= normalizedValue;
         copy_acc[2] *= normalizedValue;
 
-        // calculate theory gravity: (corrected full formula)
         theory_gx = 2.0f*(q1*q3 - q0*q2);
         theory_gy = 2.0f*(q2*q3 + q0*q1);
         theory_gz = q0*q0 - q1*q1 - q2*q2 + q3*q3;
 
-        // find error with actual gravity by cross product and find the angle between them (error is angle between them):
         error_x = (copy_acc[1]*theory_gz - copy_acc[2]*theory_gy);
         error_y = (copy_acc[2]*theory_gx - copy_acc[0]*theory_gz);
         error_z = (copy_acc[0]*theory_gy - copy_acc[1]*theory_gx);
 
-        // use PI controller: P and I in mahony struct already
-        // here for KI fix with anti-windup
-        #define INTEGRAL_LIMIT 2.0f
         if (mahony->Ki > 0.0f){
-            mahony->integralFB[0] += mahony->Ki * error_x * dt;
-            mahony->integralFB[1] += mahony->Ki * error_y * dt;
-            mahony->integralFB[2] += mahony->Ki * error_z * dt;
+            // Use adaptive ki
+            mahony->integralFB[0] += ki * error_x * dt;
+            mahony->integralFB[1] += ki * error_y * dt;
+            mahony->integralFB[2] += ki * error_z * dt;
             
-            // apply integral limits to prevent windup
+            #define INTEGRAL_LIMIT 2.0f
             if(mahony->integralFB[0] > INTEGRAL_LIMIT) mahony->integralFB[0] = INTEGRAL_LIMIT;
             else if(mahony->integralFB[0] < -INTEGRAL_LIMIT) mahony->integralFB[0] = -INTEGRAL_LIMIT;
-            
             if(mahony->integralFB[1] > INTEGRAL_LIMIT) mahony->integralFB[1] = INTEGRAL_LIMIT;
             else if(mahony->integralFB[1] < -INTEGRAL_LIMIT) mahony->integralFB[1] = -INTEGRAL_LIMIT;
-            
             if(mahony->integralFB[2] > INTEGRAL_LIMIT) mahony->integralFB[2] = INTEGRAL_LIMIT;
             else if(mahony->integralFB[2] < -INTEGRAL_LIMIT) mahony->integralFB[2] = -INTEGRAL_LIMIT;
             
-            // apply gyro patch
             copy_gyro[0] += mahony->integralFB[0];
             copy_gyro[1] += mahony->integralFB[1];
             copy_gyro[2] += mahony->integralFB[2];
         } else {
-            mahony->integralFB[0] = 0.0f;
-            mahony->integralFB[1] = 0.0f;
-            mahony->integralFB[2] = 0.0f;
+            mahony->integralFB[0] = mahony->integralFB[1] = mahony->integralFB[2] = 0.0f;
         }
 
-        // here for KP fix, recall PID is done by P,I and D superpostion:
-        copy_gyro[0] += mahony->Kp * error_x;
-        copy_gyro[1] += mahony->Kp * error_y;
-        copy_gyro[2] += mahony->Kp * error_z;
+        // Use adaptive kp
+        copy_gyro[0] += kp * error_x;
+        copy_gyro[1] += kp * error_y;
+        copy_gyro[2] += kp * error_z;
     }
 
-    // find the new quaternion:
     copy_gyro[0] *= (0.5f * dt);
     copy_gyro[1] *= (0.5f * dt);
     copy_gyro[2] *= (0.5f * dt);
 
-    qa = q0;
-    qb = q1;
-    qc = q2;
+    qa = q0; qb = q1; qc = q2;
 
     q0 += (-qb * copy_gyro[0] - qc * copy_gyro[1] - q3 * copy_gyro[2]); 
-	q1 += (qa * copy_gyro[0] + qc * copy_gyro[2] - q3 * copy_gyro[1]);
-	q2 += (qa * copy_gyro[1] - qb * copy_gyro[2] + q3 * copy_gyro[0]);
-	q3 += (qa * copy_gyro[2] + qb * copy_gyro[1] - qc * copy_gyro[0]); 
+    q1 += (qa * copy_gyro[0] + qc * copy_gyro[2] - q3 * copy_gyro[1]);
+    q2 += (qa * copy_gyro[1] - qb * copy_gyro[2] + q3 * copy_gyro[0]);
+    q3 += (qa * copy_gyro[2] + qb * copy_gyro[1] - qc * copy_gyro[0]); 
 
-    // normalized the updated quaternion:
     normalizedValue = 1.0f/sqrtf(q0*q0 + q1*q1 + q2*q2 + q3*q3);
-    q0 *= normalizedValue;
-    q1 *= normalizedValue;
-    q2 *= normalizedValue;
-    q3 *= normalizedValue;
+    q0 *= normalizedValue; q1 *= normalizedValue; q2 *= normalizedValue; q3 *= normalizedValue;
 
-    // store them back to mahony struct
-    mahony->q[0] = q0;
-    mahony->q[1] = q1;
-    mahony->q[2] = q2;
-    mahony->q[3] = q3;
+    mahony->q[0] = q0; mahony->q[1] = q1; mahony->q[2] = q2; mahony->q[3] = q3;
 
-    // find the angle: math function out radius with range protection
     #define PI 3.14159265359f
     mahony->roll  = atan2f(2.0f*(q0*q1 + q2*q3), 1.0f - 2.0f*(q1*q1 + q2*q2));
-    mahony->pitch = asinf(clamp_f(-2.0f*(q1*q3 - q0*q2), -1.0f, 1.0f));
+    mahony->pitch = asinf(fminf(fmaxf(-2.0f*(q1*q3 - q0*q2), -1.0f), 1.0f));
     mahony->yaw   = atan2f(2.0f*(q0*q3 + q1*q2), 1.0f - 2.0f*(q2*q2 + q3*q3));
     
-    // normalize angles to [-PI, PI] to prevent overflow values
-    if(mahony->roll > PI) mahony->roll -= 2.0f*PI;
-    else if(mahony->roll < -PI) mahony->roll += 2.0f*PI;
-    
-    if(mahony->pitch > PI) mahony->pitch -= 2.0f*PI;
-    else if(mahony->pitch < -PI) mahony->pitch += 2.0f*PI;
-    
-    if(mahony->yaw > PI) mahony->yaw -= 2.0f*PI;
-    else if(mahony->yaw < -PI) mahony->yaw += 2.0f*PI;
-
+    if(mahony->roll > PI) mahony->roll -= 2.0f*PI; else if(mahony->roll < -PI) mahony->roll += 2.0f*PI;
+    if(mahony->pitch > PI) mahony->pitch -= 2.0f*PI; else if(mahony->pitch < -PI) mahony->pitch += 2.0f*PI;
+    if(mahony->yaw > PI) mahony->yaw -= 2.0f*PI; else if(mahony->yaw < -PI) mahony->yaw += 2.0f*PI;
 }
 
 /**
@@ -329,7 +305,7 @@ int icm_init(){
         return -1;
 
     // init mahony
-    Mahony_Init(&ahrs, 2.0f, 0.1f);
+    Mahony_Init(&ahrs);
 
     HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, SET);
     
@@ -652,14 +628,20 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     //if(icm_read_all_data(imu->acc, imu->gyro)!=0) return -1;
     if(icm_read_all_data_dma(imu->acc, imu->gyro)!=0) return -1;
 
-    // 20% interrupt total
-
     // apply calibration
-
     for(int i=0;i<3;i++){
         imu->gyro[i] -= robot_config.imu_gyro_offset[i];
     }
     
+    // 二阶Butterworth滤波器 (fs=20kHz, fc=600Hz) 
+    const float a[4] = {1.0f, -1.734725768809275f, 0.7660066009432638f, 0.0f}; 
+    const float b[4] = {0.007820208033497193f, 0.015640416066994386f, 0.007820208033497193f, 0.0f};
+
+    for(int i=0;i<3;i++){ // DO NOT filter Pitch, Yaw and Roll due to Warp-to-PI
+        imu_clean->acc[i]=filter_iir_eval(&iir[i], imu->acc[i], 2, a, b);
+        imu_clean->gyro[i]=filter_iir_eval(&iir[i], imu->gyro[i], 2, a, b);
+    }
+
     float gyro_rad[3];
     gyro_rad[0]=imu->gyro[0]*DEG2RAD;
     gyro_rad[1]=imu->gyro[1]*DEG2RAD;
@@ -672,22 +654,6 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     imu->pitch = ahrs.pitch;
     imu->roll = ahrs.roll;
 
-    float* imu_f=(void *)imu;
-    float* imu_clean_f=(void *)imu_clean;
-
-    // // 二阶Butterworth滤波器 (fs=20kHz, fc=400Hz)
-    // const float a[4] = {1.0f, -1.82269493f, 0.83718165f, 0.0f};
-    // const float b[4] = {0.00362168f, 0.00724336f, 0.00362168f, 0.0f};
-
-    // 二阶Butterworth滤波器 (fs=20kHz, fc=600Hz) 
-    const float a[4] = {1.0f, -1.734725768809275f, 0.7660066009432638f, 0.0f}; 
-    const float b[4] = {0.007820208033497193f, 0.015640416066994386f, 0.007820208033497193f, 0.0f};
-
-    // %5 interrupt time
-    for(int i=0;i<3;i++){ // DO NOT filter Pitch, Yaw and Roll due to Warp-to-PI
-        imu_clean->acc[i]=filter_iir_eval(&iir[i], imu->acc[i], 2, a, b);
-        imu_clean->gyro[i]=filter_iir_eval(&iir[i], imu->gyro[i], 2, a, b);
-    }
     imu_clean->pitch = imu->pitch;
     imu_clean->yaw = imu->yaw;
     imu_clean->roll = imu->roll;
