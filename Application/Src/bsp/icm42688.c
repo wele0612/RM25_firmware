@@ -27,48 +27,7 @@ typedef struct {
     float integralFB[3];
 
     float Kp;
-    float Kp_max;
     float Ki;
-    float Kd;                 // derivative damping (small)
-
-    float integral_limit;
-    float accel_reject_thresh;
-    float gyro_boost_thresh;
-    float boost_duration;
-    float boost_timer;
-    float last_gyro_norm;
-
-    float gyro_drop_trigger;
-    float gyro_dot_trigger;
-    float centripetal_omega_thresh;
-    float centripetal_trust;
-
-    float accel_norm_lpf;
-    float accel_lpf_alpha;
-
-    // gyro LPF to reduce high-frequency noise
-    float gyro_lpf[3];
-    float gyro_lpf_alpha;
-
-    // fast settle
-    float fast_settle_timer;
-    float fast_settle_duration;
-
-    // Kp smoothing state
-    float kp_state;
-    float kp_ramp_time;
-
-    // last error and edot LPF
-    float last_ex, last_ey, last_ez;
-    float edot_lpf_x, edot_lpf_y, edot_lpf_z;
-    float edot_lpf_alpha;
-
-    // error LPF (to remove step-injection into correction)
-    float err_lpf_x, err_lpf_y, err_lpf_z;
-    float err_lpf_alpha;
-
-    // boost shape power for smooth decay
-    float boost_shape_power;
 
     float roll;
     float pitch;
@@ -86,42 +45,7 @@ static inline void Mahony_Init(MahonyAHRS *mahony, float Kp, float Ki) {
 
     // Tuned values: somewhat aggressive but with HF suppression and smooth boost
     mahony->Kp = 3.5f;             // base proportional gain original 3.5
-    mahony->Kp_max = 30.0f;        // allowed boosted Kp (short)
     mahony->Ki = 0.02f;            // small integral original 0.02
-    mahony->Kd = 0.03f;            // small derivative damping
-
-    mahony->integral_limit = 0.20f;
-    mahony->accel_reject_thresh = 0.22f; // g
-    mahony->gyro_boost_thresh = 0.9f;    // rad/s
-    mahony->boost_duration = 0.025f;     // seconds
-    mahony->boost_timer = 0.0f;
-    mahony->last_gyro_norm = 0.0f;
-
-    mahony->gyro_drop_trigger = 0.35f;
-    mahony->gyro_dot_trigger = 28.0f;
-    mahony->centripetal_omega_thresh = 3.0f;
-    mahony->centripetal_trust = 0.08f;
-
-    mahony->accel_norm_lpf = 1.0f;
-    mahony->accel_lpf_alpha = 0.08f;
-
-    mahony->gyro_lpf[0]=mahony->gyro_lpf[1]=mahony->gyro_lpf[2]=0.0f;
-    mahony->gyro_lpf_alpha = 0.20f;
-
-    mahony->fast_settle_duration = 0.012f;
-    mahony->fast_settle_timer = 0.0f;
-
-    mahony->kp_state = mahony->Kp;
-    mahony->kp_ramp_time = 0.020f; // slower ramp to reduce step excitation
-
-    mahony->last_ex = mahony->last_ey = mahony->last_ez = 0.0f;
-    mahony->edot_lpf_x = mahony->edot_lpf_y = mahony->edot_lpf_z = 0.0f;
-    mahony->edot_lpf_alpha = 0.30f;
-
-    mahony->err_lpf_x = mahony->err_lpf_y = mahony->err_lpf_z = 0.0f;
-    mahony->err_lpf_alpha = 0.18f; // error LPF
-
-    mahony->boost_shape_power = 2.0f; // quadratic decay
 
     mahony->roll = mahony->pitch = mahony->yaw = 0.0f;
 }
