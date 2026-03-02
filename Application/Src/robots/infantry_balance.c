@@ -117,6 +117,8 @@ PID_t rightleg_dtheta_pid={ // right side leg angular velocity
     .integral_max=1.0f
 };
 
+static const float robot_weight = 12.0f;
+
 enum {
     WBR_STANDBY=0, // All joints disabled. Default after power-up
     WBR_CONST_VEL, // Constant leg rotation velocity
@@ -207,6 +209,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->roll = wrap_to_pi(-imu_data.roll+PI);
 
     geo->F_wheel_support = (fmotor.joint_LF.torque_actual - fmotor.joint_LB.torque_actual) / (2.0f * geo->J_l[0]);
+    geo->F_wheel_support -= (fmotor.joint_RF.torque_actual - fmotor.joint_RB.torque_actual) / (2.0f * geo->J_r[0]);
+
+    float f_support_thry = imu_data.acc[2]*(-9.81f*robot_weight);
+    const float f_support_alpha = 0.05f;
+    geo->F_support_thry = f_support_alpha*f_support_thry + (1.0f - f_support_alpha)*geo->F_support_thry;
 
     // ================== Update target value =======================
 
@@ -232,7 +239,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_th_lr = 5.5f*DEGtoRAD;
 
         geo->target_ds = dr16.channel[1]*1.1f;
-        geo->target_dphi = -dr16.channel[0]*5.0f;
+        geo->target_dphi = -dr16.channel[0]*9.0f;
         geo->target_phi_diff += (geo->dphi - geo->target_dphi)*CTRL_DELTA_T;
         geo->target_phi_diff = limit_val(geo->target_phi_diff, 1.0f);
 
@@ -258,10 +265,10 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->Twr = pid_cycle(&wheel_r_vel_calib_pit, - fmotor.wheel_R.speed, CTRL_DELTA_T);
     }else if(wbr_state == WBR_LQR){
         const float K_mat[4][10] = {
-            {-0.43076f, -2.88243f, -0.71386f, -1.60790f, -7.73232f, -0.84936f, -6.17080f, -0.69328f, -4.91836f, -1.10595f},
-            {-0.43076f, -2.88243f, 0.71386f, 1.60790f, -6.17080f, -0.69328f, -7.73232f, -0.84936f, -4.91836f, -1.10595f},
-            {1.48885f, 9.83748f, -1.53494f, -3.51626f, 23.74244f, 2.60984f, 0.47002f, 1.10241f, -35.78619f, -4.07231f},
-            {1.48885f, 9.83748f, 1.53494f, 3.51626f, 0.47002f, 1.10241f, 23.74244f, 2.60984f, -35.78619f, -4.07231f}
+            {-0.44363f, -2.96722f, -0.71238f, -1.60458f, -7.84784f, -0.87851f, -6.27585f, -0.70180f, -6.23402f, -1.13915f},
+            {-0.44363f, -2.96722f, 0.71238f, 1.60458f, -6.27585f, -0.70180f, -7.84784f, -0.87851f, -6.23402f, -1.13915f},
+            {1.43105f, 9.46129f, -1.54522f, -3.53900f, 23.39001f, 2.63915f, 0.14020f, 1.00558f, -44.36114f, -4.24812f},
+            {1.43105f, 9.46129f, 1.54522f, 3.53900f, 0.14020f, 1.00558f, 23.39001f, 2.63915f, -44.36114f, -4.24812f}
         };
 
         geo->lqr_err[0]= 0.0f - geo->s;
@@ -348,33 +355,33 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[0]=geo->s;
     vofa.val[1]=geo->ds;
 
-    // vofa.val[2]=geo->phi;
-    // vofa.val[3]=geo->dphi;
+    vofa.val[2]=geo->phi;
+    vofa.val[3]=geo->dphi;
 
-    vofa.val[2]=geo->roll*RADtoDEG;
-    vofa.val[3]=geo->yaw_f*RADtoDEG;
+    // vofa.val[2]=geo->roll*RADtoDEG;
+    // vofa.val[3]=geo->yaw_f*RADtoDEG;
 
     // vofa.val[4]=geo->th_ll;
     // vofa.val[5]=geo->dth_ll;
 
+    // vofa.val[4]=imu_data.acc[0];
+    // vofa.val[5]=imu_data.acc[1];
+    // vofa.val[6]=imu_data.acc[2];
+
+    // vofa.val[4]=geo->wheel_thy_vel_L;
+    // vofa.val[5]=motors.wheel_L.speed*RPMtoRADS;
+
+    vofa.val[6]=geo->F_support_thry;
+    vofa.val[7]=geo->F_wheel_support;
+
     vofa.val[8]=geo->th_b*RADtoDEG;
     vofa.val[9]=geo->dth_b;
-
-    vofa.val[4]=geo->wheel_thy_vel_L;
-    vofa.val[5]=motors.wheel_L.speed*RPMtoRADS;
-
-    vofa.val[6]=geo->wheel_thy_vel_R;
-    vofa.val[7]=motors.wheel_R.speed*RPMtoRADS;
 
     // vofa.val[8]=motors.wheel_L.speed;
     // vofa.val[9]=motors.wheel_R.speed;
 
     // vofa.val[8]=geo->L_diff;
     // vofa.val[9]=geo->b_height;
-
-    // if(CTRL_DELTA_T != 0.001f){
-    //     vofa.val[9]+=0.001f;
-    // }
 
     // vofa.val[0]=geo->L_l;
     // vofa.val[1]=geo->Fnl;
@@ -505,6 +512,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     // pid for speed ring
     vofa.val[4]=target_speed_pitch;
     vofa.val[5]=motors.motor_pitch.speed;
+
+    vofa.val[6]=motors.motor_pitch.position*RADtoDEG - 40.0f;
+    vofa.val[7]=imu_data.pitch*RADtoDEG;
+
+    vofa.val[8]=imu_data.roll*RADtoDEG;
+    vofa.val[9]=imu_data.yaw*RADtoDEG;
     
 }
 
