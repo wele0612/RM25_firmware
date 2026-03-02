@@ -88,6 +88,7 @@
 
             float b_height;
             float roll;
+            float L_diff;
 
             float L_l;
             float L_r;
@@ -134,7 +135,7 @@
             float F_wheel_support; // total supporting force from the joint
 
             float target_ds;
-            float target_phi;
+            float target_phi_diff;
             float target_dphi;
             float target_th_ll;
             float target_th_lr;

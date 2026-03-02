@@ -142,6 +142,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
+    if(fmotor.joint_LB.torque_actual >= 4.0f){
+        volatile int i=0;
+        i+=1;
+    }
+
     if(dr16.s1 == DR16_SWITCH_UP){
         wbr_state=WBR_CONST_VEL;
     }else if(dr16.s1 == DR16_SWITCH_MID){
@@ -227,7 +232,8 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_R_length = 0.19f;
         geo->target_R_leg_omega = limit_val(3.0f*(0.2f-geo->th_lr_nb), 1.6f);
 
-        geo->target_phi = geo->phi;
+        geo->target_phi_diff = 0.0f;
+        geo->s = 0.0f;
 
     }else if(wbr_state == WBR_LQR){
         geo->target_b_height = 0.22f;
@@ -237,7 +243,8 @@ void role_controller_step(const float CTRL_DELTA_T){
 
         geo->target_ds = dr16.channel[1]*1.1f;
         geo->target_dphi = -dr16.channel[0]*5.0f;
-        geo->target_phi += geo->target_dphi*CTRL_DELTA_T;
+        geo->target_phi_diff += (geo->dphi - geo->target_dphi)*CTRL_DELTA_T;
+        geo->target_phi_diff = limit_val(geo->target_phi_diff, 1.0f);
 
         geo->target_roll = dr16.channel[2]*0.15f;
     }
@@ -264,7 +271,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
         geo->lqr_err[0]= 0.0f - geo->s;
         geo->lqr_err[1]= geo->target_ds - geo->ds;
-        geo->lqr_err[2]= wrap_to_pi(geo->target_phi - geo->phi);
+        geo->lqr_err[2]= -geo->target_phi_diff; 
         geo->lqr_err[3]= geo->target_dphi - geo->dphi;
         geo->lqr_err[4]= wrap_to_pi(geo->target_th_ll - geo->th_ll);
         geo->lqr_err[5]= 0.0f - geo->dth_ll;
@@ -291,14 +298,14 @@ void role_controller_step(const float CTRL_DELTA_T){
             geo->Tblr += K_mat[3][i]*geo->lqr_err[i];
         }
 
-        float L_diff = pid_cycle(&body_roll_pid, geo->target_roll - geo->roll, CTRL_DELTA_T);
-        L_diff = limit_val(L_diff, 0.05f);
-        geo->target_L_length = geo->target_b_height + L_diff;
-        geo->target_R_length = geo->target_b_height - L_diff;
+        geo->L_diff = pid_cycle(&body_roll_pid, geo->target_roll - geo->roll, CTRL_DELTA_T);
+        geo->L_diff = limit_val(geo->L_diff, 0.05f);
+        geo->target_L_length = geo->target_b_height + geo->L_diff;
+        geo->target_R_length = geo->target_b_height - geo->L_diff;
         
         if(HAL_GetTick()%2==0){ // Left side
             geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
-            geo->Fnl -= 50.0f; // There's a spring on left side.
+            // geo->Fnl -= 50.0f; // There's a spring on left side.
             geo->Fnl += 50.0f;
         }else{ // Right side
             geo->Fnr = pid_cycle(&rightleg_length_pid, geo->target_R_length - geo->L_r, CTRL_DELTA_T*2);
@@ -324,13 +331,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     if(HAL_GetTick()%2==0){
         geo->T_LF = geo->J_l[0]*geo->Fnl + geo->J_l[1]*geo->Tbll;
         geo->T_LB = geo->J_l[2]*geo->Fnl + geo->J_l[3]*geo->Tbll;
-        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(fmotor.joint_LF.tranmitbuf, geo->T_LF), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(fmotor.joint_LB.tranmitbuf, -geo->T_LB), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_LF_CTRLID, set_torque_DM8009P(motors.joint_LF.tranmitbuf, geo->T_LF), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_LB_CTRLID, set_torque_DM8009P(motors.joint_LB.tranmitbuf, -geo->T_LB), 8);
     }else{
         geo->T_RF = -geo->J_r[0]*geo->Fnr - geo->J_r[1]*geo->Tblr;
         geo->T_RB = -geo->J_r[2]*geo->Fnr - geo->J_r[3]*geo->Tblr;
-        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(fmotor.joint_RF.tranmitbuf, geo->T_RF), 8);
-        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(fmotor.joint_RB.tranmitbuf, -geo->T_RB), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_RF_CTRLID, set_torque_DM8009P(motors.joint_RF.tranmitbuf, geo->T_RF), 8);
+        fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, set_torque_DM8009P(motors.joint_RB.tranmitbuf, -geo->T_RB), 8);
     }
 
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, \
@@ -344,20 +351,26 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[0]=geo->s;
     vofa.val[1]=geo->ds;
 
-    vofa.val[2]=geo->phi;
-    vofa.val[3]=geo->dphi;
+    // vofa.val[2]=geo->phi;
+    // vofa.val[3]=geo->dphi;
 
-    vofa.val[4]=geo->th_ll;
-    vofa.val[5]=geo->dth_ll;
+    vofa.val[2]=geo->lqr_err[2];
+    vofa.val[3]=geo->lqr_err[3];
+
+    // vofa.val[4]=geo->th_ll;
+    // vofa.val[5]=geo->dth_ll;
+
+    vofa.val[8]=geo->th_b;
+    vofa.val[9]=geo->dth_b;
+
+    vofa.val[4]=imu_data.roll;
+    vofa.val[5]=geo->roll;
 
     vofa.val[6]=fmotor.joint_LF.torque_actual;
     vofa.val[7]=fmotor.joint_LB.torque_actual;
 
-    vofa.val[8]=geo->roll;
-    vofa.val[9]=geo->b_height;
-
-    // vofa.val[8]=geo->th_b;
-    // vofa.val[9]=geo->dth_b;
+    // vofa.val[8]=geo->L_diff;
+    // vofa.val[9]=geo->b_height;
 
     // if(CTRL_DELTA_T != 0.001f){
     //     vofa.val[9]+=0.001f;
