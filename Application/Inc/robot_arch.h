@@ -67,17 +67,17 @@
 #ifdef CONFIG_PLATFORM_BASE
     #ifdef CONFIG_ROBOT_INFANTRY_BALANCE
         // BASE + INFANTRY_BALANCE configuration
-        #define JOINT_LF_CTRLID 0x08
-        #define JOINT_RF_CTRLID 0x09
-        #define JOINT_LB_CTRLID 0x0A
-        #define JOINT_RB_CTRLID 0x0B
-        #define JOINT_YAW_CTRLID 0x0C
+        #define JOINT_LF_CTRLID 0x00
+        #define JOINT_RF_CTRLID 0x01
+        #define JOINT_LB_CTRLID 0x02
+        #define JOINT_RB_CTRLID 0x03
+        #define JOINT_YAW_CTRLID 0x04
 
-        #define JOINT_LF_FEEDBACKID 0x00
-        #define JOINT_RF_FEEDBACKID 0x01
-        #define JOINT_LB_FEEDBACKID 0x02
-        #define JOINT_RB_FEEDBACKID 0x03
-        #define JOINT_YAW_FEEDBACKID 0x04
+        #define JOINT_LF_FEEDBACKID 0x08
+        #define JOINT_RF_FEEDBACKID 0x09
+        #define JOINT_LB_FEEDBACKID 0x0A
+        #define JOINT_RB_FEEDBACKID 0x0B
+        #define JOINT_YAW_FEEDBACKID 0x0C
 
         typedef struct robot_motors_t{
             // CAN2 motors:
@@ -147,7 +147,12 @@
             float T_RF;
             float T_RB;
 
+            float gimbal_yaw_vel;
+            float gimbal_yaw_pos;
+            float T_yaw;
+
             float F_wheel_support; // total supporting force from the joint
+            float F_support_thry; // expected supporting force based on gravity acceleration
 
             float target_ds;
             float target_phi_diff;
@@ -163,6 +168,9 @@
 
             float target_L_leg_omega;
             float target_R_leg_omega;
+
+            float target_gim_yaw_vel;
+            float target_gim_yaw_pos;
 
         }robot_ctrl_t;
     #endif
