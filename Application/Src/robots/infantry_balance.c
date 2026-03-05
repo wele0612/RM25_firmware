@@ -441,16 +441,16 @@ PID_t right_wheel={
 };
 
 PID_t pitch_omega_pid={
-    .P=0.008f,
-    .I=0.0f,
-    .D=0.00f,
-    .integral_max=0.01f
+    .P=2.5f,
+    .I=25.0f,
+    .D=0.01f,
+    .integral_max=0.1f
 };
 
 PID_t pitch_pos_pid={
-    .P=17.0f,
+    .P=10.0f,
     .I=0.0f,
-    .D=0.00f,
+    .D=0.04f,
     .integral_max=0.01f
 };
 
@@ -487,17 +487,51 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     float target_speed_pitch = 0.0f;
 
-    if (dr16.channel[0] > 0.5f) {
-        target_speed_pitch = 0.5f;
+    /* if (dr16.channel[0] > 0.5f) {
+        target_speed_pitch = 0.8f;
     } else if (dr16.channel[0] < -0.5f) {
-        target_speed_pitch = - 0.5f;
+        target_speed_pitch = - 0.8f;
     } else {
         target_speed_pitch = 0.0f;
     }
+ */
+    robot_geo.target_position_pitch += dr16.channel[1]*CTRL_DELTA_T*0.6f; // range from -1 to 1
 
-    float pitch_speed_err = target_speed_pitch - motors.motor_pitch.speed;
+    // clamp the maximum and minimum target position to prevent over-rotation
+    if (robot_geo.target_position_pitch >= 0.49f) {
+        robot_geo.target_position_pitch = 0.49f;
+    }
+    if (robot_geo.target_position_pitch <= -0.59f) {
+        robot_geo.target_position_pitch = -0.59f;
+    }
+
+    // hook unit step response:
+    if (dr16.channel[1] > 0.5f) {
+        robot_geo.target_position_pitch = 0.3f;
+    } else if (dr16.channel[1] < -0.5f) {
+        robot_geo.target_position_pitch = -0.4f;
+    } else {
+        robot_geo.target_position_pitch = 0.0f;
+    }
+
+    const float target_pitch = robot_geo.target_position_pitch;
+    float pitch_pos_err = target_pitch - imu_data.pitch;
+
+    target_speed_pitch = limit_val(pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 5.0f);
+
+    // find pitch speed error
+    float pitch_speed_err = 0.0f;
+    if (fabsf(motors.motor_pitch.speed) < 0.05f && fabsf(imu_data.gyro[1]*(PI/180.0f)) < 0.05f){
+        pitch_speed_err = target_speed_pitch;
+    } else {
+        pitch_speed_err = target_speed_pitch - imu_data.gyro[1]*(PI/180.0f);
+    }
+
+    // target_speed_pitch = -dr16.channel[1] * 2.0f;
     float pitch_torque = pid_cycle(&pitch_omega_pid, pitch_speed_err, CTRL_DELTA_T);
 
+    // add feedforward 
+    pitch_torque += 0.4528f * imu_data.pitch * imu_data.pitch - 0.2539f * imu_data.pitch + 1.1660f;
     
     fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(tx_buffer, pitch_torque), 8);
 
@@ -511,13 +545,17 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // pid for speed ring
     vofa.val[4]=target_speed_pitch;
-    vofa.val[5]=motors.motor_pitch.speed;
+    vofa.val[5]=imu_data.gyro[1]*DEGtoRAD;
+    vofa.val[6]=pitch_torque;
+    vofa.val[7]=imu_data.pitch;
+    vofa.val[8]=robot_geo.target_position_pitch;
+    vofa.val[9]=dr16.channel[1];
 
-    vofa.val[6]=motors.motor_pitch.position*RADtoDEG - 40.0f;
+/*     vofa.val[6]=motors.motor_pitch.position*RADtoDEG - 40.0f;
     vofa.val[7]=imu_data.pitch*RADtoDEG;
 
     vofa.val[8]=imu_data.roll*RADtoDEG;
-    vofa.val[9]=imu_data.yaw*RADtoDEG;
+    vofa.val[9]=imu_data.yaw*RADtoDEG; */
     
 }
 
