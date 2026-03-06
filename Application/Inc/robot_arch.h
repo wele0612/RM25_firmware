@@ -19,6 +19,7 @@
         typedef struct robot_ctrl_t{
             float target_rpm_left;
             float target_rpm_right;
+            float target_position_pitch;
         }robot_ctrl_t;
         
     #endif
