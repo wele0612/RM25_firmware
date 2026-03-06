@@ -509,16 +509,16 @@ PID_t right_wheel={
 };
 
 PID_t pitch_omega_pid={
-    .P=2.5f,
+    .P=5.0f,
     .I=25.0f,
     .D=0.01f,
-    .integral_max=0.1f
+    .integral_max=0.15f
 };
 
 PID_t pitch_pos_pid={
     .P=10.0f,
     .I=0.0f,
-    .D=0.04f,
+    .D=0.05f,
     .integral_max=0.01f
 };
 
@@ -550,42 +550,39 @@ void role_controller_step(const float CTRL_DELTA_T){
     uint8_t tx_buffer[8];
     fdcanx_send_data(&hfdcan2, 0x200, set_current_M3508(tx_buffer, left_current, right_current, 0.0f, 0.0f), 8);
 
-    // check for DM4310:
-
-
     float target_speed_pitch = 0.0f;
-
-    /* if (dr16.channel[0] > 0.5f) {
-        target_speed_pitch = 0.8f;
-    } else if (dr16.channel[0] < -0.5f) {
-        target_speed_pitch = - 0.8f;
-    } else {
-        target_speed_pitch = 0.0f;
-    }
- */
-    robot_geo.target_position_pitch += dr16.channel[1]*CTRL_DELTA_T*0.6f; // range from -1 to 1
+    float input_pitch_vel;
+    // To test gimbal bandwidth
+    // if(dr16.s2 == DR16_SWITCH_UP){
+    //     input_pitch_vel = cosf((float)HAL_GetTick()*(0.001f*2.0f*PI)*3.0f)*1.0f;
+    // }
+    input_pitch_vel = dr16.channel[1]*2.2f;
+    
+    robot_geo.target_position_pitch += input_pitch_vel*CTRL_DELTA_T; // range from -1 to 1
 
     // clamp the maximum and minimum target position to prevent over-rotation
-    if (robot_geo.target_position_pitch >= 0.49f) {
-        robot_geo.target_position_pitch = 0.49f;
+    const float gimbal_pitch_max = 29.0f*DEGtoRAD;
+    const float gimbal_pitch_min = -28.0f*DEGtoRAD;
+    if (robot_geo.target_position_pitch >= gimbal_pitch_max) {
+        robot_geo.target_position_pitch = gimbal_pitch_max;
     }
-    if (robot_geo.target_position_pitch <= -0.59f) {
-        robot_geo.target_position_pitch = -0.59f;
+    if (robot_geo.target_position_pitch <= gimbal_pitch_min) {
+        robot_geo.target_position_pitch = gimbal_pitch_min;
     }
 
     // hook unit step response:
-    if (dr16.channel[1] > 0.5f) {
-        robot_geo.target_position_pitch = 0.3f;
-    } else if (dr16.channel[1] < -0.5f) {
-        robot_geo.target_position_pitch = -0.4f;
-    } else {
-        robot_geo.target_position_pitch = 0.0f;
-    }
+    // if (dr16.channel[1] > 0.5f) {
+    //     robot_geo.target_position_pitch = 0.4f;
+    // } else if (dr16.channel[1] < -0.5f) {
+    //     robot_geo.target_position_pitch = -0.5f;
+    // } else {
+    //     robot_geo.target_position_pitch = 0.0f;
+    // }
 
     const float target_pitch = robot_geo.target_position_pitch;
     float pitch_pos_err = target_pitch - imu_data.pitch;
 
-    target_speed_pitch = limit_val(pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 5.0f);
+    target_speed_pitch = limit_val(input_pitch_vel*0.7f + pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 10.0f);
 
     // find pitch speed error
     float pitch_speed_err = 0.0f;
@@ -599,8 +596,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     float pitch_torque = pid_cycle(&pitch_omega_pid, pitch_speed_err, CTRL_DELTA_T);
 
     // add feedforward 
-    pitch_torque += 0.4528f * imu_data.pitch * imu_data.pitch - 0.2539f * imu_data.pitch + 1.1660f;
-    
+    // pitch_torque += 0.4528f * imu_data.pitch * imu_data.pitch - 0.2539f * imu_data.pitch + 1.1660f;
+    pitch_torque += -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
+
     fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(tx_buffer, pitch_torque), 8);
 
     // print speed
@@ -609,7 +607,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // print current
     vofa.val[2]=motors.wheel_left.current;
-    vofa.val[3]=motors.wheel_right.current;
+    vofa.val[3]=dr16.channel[1]*2.2f;
 
     // pid for speed ring
     vofa.val[4]=target_speed_pitch;
@@ -617,14 +615,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[6]=pitch_torque;
     vofa.val[7]=imu_data.pitch;
     vofa.val[8]=robot_geo.target_position_pitch;
-    vofa.val[9]=dr16.channel[1];
+    vofa.val[9]=(float)HAL_GetTick();
 
-/*     vofa.val[6]=motors.motor_pitch.position*RADtoDEG - 40.0f;
-    vofa.val[7]=imu_data.pitch*RADtoDEG;
-
-    vofa.val[8]=imu_data.roll*RADtoDEG;
-    vofa.val[9]=imu_data.yaw*RADtoDEG; */
-    
 }
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){
