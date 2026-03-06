@@ -20,15 +20,16 @@ static void enable_all_Damiao(){
     HAL_Delay(2);
     fdcanx_send_data(&hfdcan3, JOINT_RB_CTRLID, enable_DM_Joint(motors.joint_RB.tranmitbuf), 8);
     HAL_Delay(2);
-    fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, enable_DM_Joint(motors.joint_LF.tranmitbuf), 8);
+    fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, enable_DM_Joint(motors.joint_yaw.tranmitbuf), 8);
+    
 }
 
 static const float L1 = 250.0e-3f;
 static const float L2 = 94.5e-3f + 115.5e-3f;
-static const float d1 = 94.5e-3f;
-static const float d2 = 112.5e-3f;
-static const float d3 = 112.5e-3f;
-static const float d4 = 94.5e-3f;
+// static const float d1 = 94.5e-3f;
+// static const float d2 = 112.5e-3f;
+// static const float d3 = 112.5e-3f;
+// static const float d4 = 94.5e-3f;
 
 static inline void forward_kinetics_jacobian(
                             float theta1, float theta2, 
@@ -117,6 +118,13 @@ PID_t rightleg_dtheta_pid={ // right side leg angular velocity
     .integral_max=1.0f
 };
 
+PID_t gim_yaw_vel_pid={
+    .P=0.5f,
+    .I=3.0f,
+    .D=0.0f,
+    .integral_max=0.05f
+};
+
 static const float robot_weight = 12.0f;
 
 enum {
@@ -152,6 +160,21 @@ void role_controller_step(const float CTRL_DELTA_T){
         wbr_state=WBR_LQR;
     }
     // wbr_state = WBR_STANDBY;
+
+    // ----------------- Gimbal / Feeder control -----------------
+
+    float gimbal_yaw_vel = fmotor.joint_yaw.speed - imu_data.gyro[2]*DEGtoRAD;
+    const float gimbal_yaw_vel_alpha = 0.05f;
+    geo->gimbal_yaw_vel = gimbal_yaw_vel*gimbal_yaw_vel_alpha + (1.0f-gimbal_yaw_vel_alpha)*geo->gimbal_yaw_vel;
+    
+    float gimbal_vel_enc_vel = (fmotor.joint_yaw.position - geo->gimbal_yaw_pos)*(1/CTRL_DELTA_T);
+    geo->gimbal_yaw_pos = fmotor.joint_yaw.position;
+
+    float thry_target_motor_vel = geo->target_gim_yaw_vel;
+    geo->T_yaw = friction_compensation(thry_target_motor_vel, 0.5f, (1/0.6f));
+    geo->T_yaw += pid_cycle(&gim_yaw_vel_pid, geo->target_gim_yaw_vel - geo->gimbal_yaw_vel, CTRL_DELTA_T);
+    
+    // ----------------- WBR Base control -----------------
 
     const float left_th1 = fmotor.joint_LF.position + (PI/2); 
     const float left_th2 = -fmotor.joint_LB.position + (PI/2);
@@ -217,6 +240,16 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // ================== Update target value =======================
 
+    if(dr16.channel[0]<-0.3f){
+        geo->target_gim_yaw_vel = 3.0f;
+    }else if(dr16.channel[0]>0.3f){
+        geo->target_gim_yaw_vel = -3.0f;
+    }else{
+        geo->target_gim_yaw_vel = 0.0f;
+    }
+
+    // geo->target_gim_yaw_vel = -dr16.channel[0]*5.0f;
+
     if(wbr_state == WBR_CONST_VEL){
         geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
         geo->target_L_leg_omega = 1.5f * dr16.channel[2];
@@ -233,23 +266,26 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->s = 0.0f;
 
     }else if(wbr_state == WBR_LQR){
+
+        geo->target_ds = dr16.channel[3]*1.1f;
+        geo->target_dphi = -dr16.channel[2]*6.0f;
+
         geo->target_b_height = 0.22f;
 
         geo->target_th_ll = 5.5f*DEGtoRAD;
         geo->target_th_lr = 5.5f*DEGtoRAD;
 
-        geo->target_ds = dr16.channel[1]*1.1f;
-        geo->target_dphi = -dr16.channel[0]*9.0f;
         geo->target_phi_diff += (geo->dphi - geo->target_dphi)*CTRL_DELTA_T;
         geo->target_phi_diff = limit_val(geo->target_phi_diff, 1.0f);
 
-        geo->target_roll = dr16.channel[2]*0.15f;
+        geo->target_roll = 0.0f;
 
         // float wheel_thy_vel_ds = geo->target_ds * (1.0f/(0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f));
         float wheel_thy_vel_dphi = geo->dphi * wheel_distance_half*(1.0f/(0.12f*0.5f*M3508_CUSTOM_GB_RATIO*0.5f));
         geo->wheel_thy_vel_L = wheel_thy_vel_dphi;
         geo->wheel_thy_vel_R = wheel_thy_vel_dphi;
     }
+
 
     // ==================== Update Controllers =====================
 
@@ -329,8 +365,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     // Adjust friction compensation below based on experimental data.
     geo->Twl += friction_compensation(fmotor.wheel_L.speed, 0.06f, (1/600.0f));
     geo->Twr += friction_compensation(fmotor.wheel_R.speed, 0.13f, (1/600.0f));
+    
 
-    // ==================== Send to fmotor =====================
+    // ==================== Send to motors =====================
 
     if(HAL_GetTick()%2==0){
         geo->T_LF = geo->J_l[0]*geo->Fnl + geo->J_l[1]*geo->Tbll;
@@ -352,6 +389,24 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
+    fdcanx_send_data(&hfdcan1, M3508_CTRLID_ID1_4, \
+        set_current_M3508(wheel_tx_buf, 
+            0.0f, 
+            0.0f,
+            0.0f*(1.0f/M2006_TORQUE_CONSTANT), 
+            0.0f),
+        8);
+
+    fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
+
+    // Implement board-to-board communication
+    // b2g_A.base_pitch = imu_data.pitch;
+    // b2g_A.base_yaw = geo->yaw_f;    
+    // fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
+
+    // b2g_B.base_roll = imu_data.roll;
+    // fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
+
     vofa.val[0]=geo->s;
     vofa.val[1]=geo->ds;
 
@@ -368,14 +423,20 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[5]=imu_data.acc[1];
     // vofa.val[6]=imu_data.acc[2];
 
-    // vofa.val[4]=geo->wheel_thy_vel_L;
-    // vofa.val[5]=motors.wheel_L.speed*RPMtoRADS;
+    vofa.val[4]=geo->target_gim_yaw_vel;
+    vofa.val[5]=geo->T_yaw;
 
-    vofa.val[6]=geo->F_support_thry;
-    vofa.val[7]=geo->F_wheel_support;
+    vofa.val[6]=geo->gimbal_yaw_vel;
+    vofa.val[7]=geo->gimbal_yaw_pos;
 
-    vofa.val[8]=geo->th_b*RADtoDEG;
-    vofa.val[9]=geo->dth_b;
+    vofa.val[8]=gimbal_vel_enc_vel;
+    vofa.val[9]=fmotor.joint_yaw.speed;
+
+    // vofa.val[6]=geo->F_support_thry;
+    // vofa.val[7]=geo->F_wheel_support;
+
+    // vofa.val[8]=geo->th_b*RADtoDEG;
+    // vofa.val[9]=geo->dth_b;
 
     // vofa.val[8]=motors.wheel_L.speed;
     // vofa.val[9]=motors.wheel_R.speed;
@@ -412,6 +473,13 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         break;
     case JOINT_RB_FEEDBACKID:
         parse_feedback_DM8009P(msg, &motors.joint_RB, JOINT_RB_CTRLID);
+        break;
+    case JOINT_YAW_FEEDBACKID:
+        parse_feedback_DM4310(msg, &motors.joint_yaw, JOINT_YAW_CTRLID);
+        break;
+
+    case G2B_MSG_A_ID:
+        // memcpy(&g2b_A, msg, 8);
         break;
 
     default:
