@@ -9,6 +9,7 @@
 
 #define GENERATE_DECLARE_GLOBAL_VARS
 #include <global_variables.h>
+#include <btb.h>
 #undef GENERATE_DECLARE_GLOBAL_VARS
 
 timeout_monitor_t timeout;

@@ -7,6 +7,7 @@
 #include<global_variables.h>
 
 #include<h7can.h>
+#include<btb.h>
 
 #ifdef CONFIG_PLATFORM_BASE
 
@@ -115,14 +116,21 @@ PID_t rightleg_dtheta_pid={ // right side leg angular velocity
     .P=12.0f,
     .I=0.0f,
     .D=0.0f,
-    .integral_max=1.0f
+    .integral_max=1.0f  
 };
 
 PID_t gim_yaw_vel_pid={
-    .P=0.5f,
-    .I=3.0f,
+    .P=2.5f,
+    .I=30.0f,
     .D=0.0f,
     .integral_max=0.05f
+};
+
+PID_t gim_yaw_pos_pid={
+    .P=18.0f,
+    .I=10.0f,
+    .D=0.0f,
+    .integral_max=0.01f
 };
 
 static const float robot_weight = 12.0f;
@@ -152,28 +160,36 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    if(dr16.s1 == DR16_SWITCH_UP){
-        wbr_state=WBR_CONST_VEL;
-    }else if(dr16.s1 == DR16_SWITCH_MID){
-        wbr_state=WBR_LQR_PREP;
-    }else if(dr16.s1 == DR16_SWITCH_DOWN){
-        wbr_state=WBR_LQR;
-    }
-    // wbr_state = WBR_STANDBY;
+    // if(dr16.s1 == DR16_SWITCH_UP){
+    //     wbr_state=WBR_CONST_VEL;
+    // }else if(dr16.s1 == DR16_SWITCH_MID){
+    //     wbr_state=WBR_LQR_PREP;
+    // }else if(dr16.s1 == DR16_SWITCH_DOWN){
+    //     wbr_state=WBR_LQR;
+    // }
+    wbr_state = WBR_STANDBY;
 
     // ----------------- Gimbal / Feeder control -----------------
+    geo->target_gim_yaw_pos += geo->input_yaw_vel*CTRL_DELTA_T;
+    geo->target_gim_yaw_pos = wrap_to_pi(geo->target_gim_yaw_pos);
 
-    float gimbal_yaw_vel = fmotor.joint_yaw.speed - imu_data.gyro[2]*DEGtoRAD;
-    const float gimbal_yaw_vel_alpha = 0.05f;
+    float gimbal_yaw_vel = g2b_A.gimbal_yaw_vel_imu;
+    const float gimbal_yaw_vel_alpha = 1.0f;
     geo->gimbal_yaw_vel = gimbal_yaw_vel*gimbal_yaw_vel_alpha + (1.0f-gimbal_yaw_vel_alpha)*geo->gimbal_yaw_vel;
     
+    geo->gimbal_yaw_pos += geo->gimbal_yaw_vel*CTRL_DELTA_T;
+    geo->gimbal_yaw_pos = wrap_to_pi(geo->gimbal_yaw_pos);
+
     float gimbal_vel_enc_vel = (fmotor.joint_yaw.position - geo->gimbal_yaw_pos)*(1/CTRL_DELTA_T);
-    geo->gimbal_yaw_pos = fmotor.joint_yaw.position;
+    // geo->gimbal_yaw_pos = fmotor.joint_yaw.position;
+    geo->target_gim_yaw_vel = geo->input_yaw_vel + pid_cycle(&gim_yaw_pos_pid, wrap_to_pi(geo->target_gim_yaw_pos - geo->gimbal_yaw_pos), CTRL_DELTA_T);
+    
 
     float thry_target_motor_vel = geo->target_gim_yaw_vel;
     geo->T_yaw = friction_compensation(thry_target_motor_vel, 0.5f, (1/0.6f));
     geo->T_yaw += pid_cycle(&gim_yaw_vel_pid, geo->target_gim_yaw_vel - geo->gimbal_yaw_vel, CTRL_DELTA_T);
-    
+
+
     // ----------------- WBR Base control -----------------
 
     const float left_th1 = fmotor.joint_LF.position + (PI/2); 
@@ -240,15 +256,20 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // ================== Update target value =======================
 
-    if(dr16.channel[0]<-0.3f){
-        geo->target_gim_yaw_vel = 3.0f;
-    }else if(dr16.channel[0]>0.3f){
-        geo->target_gim_yaw_vel = -3.0f;
-    }else{
-        geo->target_gim_yaw_vel = 0.0f;
-    }
-
-    // geo->target_gim_yaw_vel = -dr16.channel[0]*5.0f;
+    // if(dr16.channel[0]<-0.3f){
+    //     // geo->target_gim_yaw_vel = 3.0f;
+    //     geo->target_gim_yaw_pos = 0.8f;
+    // }else if(dr16.channel[0]>0.3f){
+    //     // geo->target_gim_yaw_vel = -3.0f;
+    //     geo->target_gim_yaw_pos = -0.8f;
+    // }else{
+    //     // geo->target_gim_yaw_vel = 0.0f;
+    //     geo->target_gim_yaw_pos = 0.0f;
+    // }
+    const float input_mouse_alpha = 0.06f;
+    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*0.02f*input_mouse_alpha;
+    geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*0.02f*input_mouse_alpha;
+    
 
     if(wbr_state == WBR_CONST_VEL){
         geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
@@ -389,23 +410,25 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    fdcanx_send_data(&hfdcan1, M3508_CTRLID_ID1_4, \
-        set_current_M3508(wheel_tx_buf, 
-            0.0f, 
-            0.0f,
-            0.0f*(1.0f/M2006_TORQUE_CONSTANT), 
-            0.0f),
-        8);
+    // fdcanx_send_data(&hfdcan1, M3508_CTRLID_ID1_4, \
+    //     set_current_M3508(wheel_tx_buf, 
+    //         0.0f, 
+    //         0.0f,
+    //         0.0f*(1.0f/M2006_TORQUE_CONSTANT), 
+    //         0.0f),
+    //     8);
 
     fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
 
     // Implement board-to-board communication
-    // b2g_A.base_pitch = imu_data.pitch;
-    // b2g_A.base_yaw = geo->yaw_f;    
-    // fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
-
-    // b2g_B.base_roll = imu_data.roll;
-    // fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
+    b2g_A.base_pitch = imu_data.pitch;
+    b2g_A.base_yaw = geo->yaw_f;    
+    fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
+    
+    geo->input_pitch_vel = limit_val(geo->input_pitch_vel, 6.0f);
+    b2g_B.target_pitch_vel = (int16_t)(geo->input_pitch_vel*(1/3E-4f));
+    b2g_B.base_roll = imu_data.roll;
+    fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
     vofa.val[0]=geo->s;
     vofa.val[1]=geo->ds;
@@ -426,11 +449,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[4]=geo->target_gim_yaw_vel;
     vofa.val[5]=geo->T_yaw;
 
-    vofa.val[6]=geo->gimbal_yaw_vel;
-    vofa.val[7]=geo->gimbal_yaw_pos;
+    vofa.val[6]=geo->target_gim_yaw_vel;
+    vofa.val[7]=geo->target_gim_yaw_pos;
 
-    vofa.val[8]=gimbal_vel_enc_vel;
-    vofa.val[9]=fmotor.joint_yaw.speed;
+    vofa.val[8]=geo->gimbal_yaw_vel;
+    vofa.val[9]=geo->gimbal_yaw_pos;
 
     // vofa.val[6]=geo->F_support_thry;
     // vofa.val[7]=geo->F_wheel_support;
@@ -479,7 +502,7 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         break;
 
     case G2B_MSG_A_ID:
-        // memcpy(&g2b_A, msg, 8);
+        memcpy(&g2b_A, msg, 8);
         break;
 
     default:
@@ -509,16 +532,16 @@ PID_t right_wheel={
 };
 
 PID_t pitch_omega_pid={
-    .P=5.0f,
-    .I=25.0f,
+    .P=4.0f,
+    .I=22.0f,
     .D=0.01f,
-    .integral_max=0.15f
+    .integral_max=0.1f
 };
 
 PID_t pitch_pos_pid={
-    .P=10.0f,
+    .P=12.0f,
     .I=0.0f,
-    .D=0.05f,
+    .D=0.03f,
     .integral_max=0.01f
 };
 
@@ -533,32 +556,43 @@ void role_controller_init(){
 
 // left with positive rpm value and rigth with negative rpm value
 void role_controller_step(const float CTRL_DELTA_T){
+    robot_ctrl_t *geo = &robot_geo;
+    robot_motors_t fmotor;
+
+    __disable_irq(); // Important Note: create a snapshot of all motor states.
+    fmotor = motors; 
+    __enable_irq();
+
+    geo->yaw_vel_imu = wrap_to_pi(imu_data.yaw - geo->yaw_m1)*(1.0f/CTRL_DELTA_T);
+    geo->yaw_m1 = imu_data.yaw;
 
     // set with target rpm
     float target_left_rpm = 50.0f;
     float target_right_rpm = -50.0f;
 
     // find error
-    float left_rpm_err = target_left_rpm - motors.wheel_left.speed;
-    float right_rpm_err = target_right_rpm - motors.wheel_right.speed;
+    float left_rpm_err = target_left_rpm - fmotor.wheel_left.speed;
+    float right_rpm_err = target_right_rpm - fmotor.wheel_right.speed;
     
     // apply pid:
-    float left_current = pid_cycle(&left_wheel, left_rpm_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
-    float right_current = pid_cycle(&right_wheel, right_rpm_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
+    geo->left_current = pid_cycle(&left_wheel, left_rpm_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
+    geo->right_current = pid_cycle(&right_wheel, right_rpm_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
 
     // apply to motor:
     uint8_t tx_buffer[8];
-    fdcanx_send_data(&hfdcan2, 0x200, set_current_M3508(tx_buffer, left_current, right_current, 0.0f, 0.0f), 8);
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buffer, geo->left_current, geo->right_current, 0.0f, 0.0f), 8);
 
     float target_speed_pitch = 0.0f;
-    float input_pitch_vel;
     // To test gimbal bandwidth
     // if(dr16.s2 == DR16_SWITCH_UP){
     //     input_pitch_vel = cosf((float)HAL_GetTick()*(0.001f*2.0f*PI)*3.0f)*1.0f;
     // }
-    input_pitch_vel = dr16.channel[1]*2.2f;
-    
-    robot_geo.target_position_pitch += input_pitch_vel*CTRL_DELTA_T; // range from -1 to 1
+    // input_pitch_vel = dr16.channel[1]*2.2f;
+    const float input_pitch_alpha = 0.1f;
+    // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_pitch_alpha) + -dr16.mouse.y*0.015f*input_pitch_alpha;
+    geo->input_pitch_vel = (float)b2g_B.target_pitch_vel*3E-4f;
+
+    robot_geo.target_position_pitch += geo->input_pitch_vel*CTRL_DELTA_T; // range from -1 to 1
 
     // clamp the maximum and minimum target position to prevent over-rotation
     const float gimbal_pitch_max = 29.0f*DEGtoRAD;
@@ -582,11 +616,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float target_pitch = robot_geo.target_position_pitch;
     float pitch_pos_err = target_pitch - imu_data.pitch;
 
-    target_speed_pitch = limit_val(input_pitch_vel*0.7f + pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 10.0f);
+    target_speed_pitch = limit_val(geo->input_pitch_vel*0.7f + pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 10.0f);
 
     // find pitch speed error
     float pitch_speed_err = 0.0f;
-    if (fabsf(motors.motor_pitch.speed) < 0.05f && fabsf(imu_data.gyro[1]*(PI/180.0f)) < 0.05f){
+    if (fabsf(fmotor.motor_pitch.speed) < 0.05f && fabsf(imu_data.gyro[1]*(PI/180.0f)) < 0.05f){
         pitch_speed_err = target_speed_pitch;
     } else {
         pitch_speed_err = target_speed_pitch - imu_data.gyro[1]*(PI/180.0f);
@@ -599,15 +633,17 @@ void role_controller_step(const float CTRL_DELTA_T){
     // pitch_torque += 0.4528f * imu_data.pitch * imu_data.pitch - 0.2539f * imu_data.pitch + 1.1660f;
     pitch_torque += -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
 
-    fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(tx_buffer, pitch_torque), 8);
+    fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
 
+    g2b_A.gimbal_yaw_vel_imu = geo->yaw_vel_imu;
+    fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
     // print speed
-    vofa.val[0]=motors.wheel_left.speed;
-    vofa.val[1]=motors.wheel_right.speed;
+    vofa.val[0]=fmotor.wheel_left.speed;
+    vofa.val[1]=fmotor.wheel_right.speed;
 
     // print current
-    vofa.val[2]=motors.wheel_left.current;
-    vofa.val[3]=dr16.channel[1]*2.2f;
+    vofa.val[2]=fmotor.wheel_left.current;
+    vofa.val[3]=geo->input_pitch_vel;
 
     // pid for speed ring
     vofa.val[4]=target_speed_pitch;
@@ -615,8 +651,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[6]=pitch_torque;
     vofa.val[7]=imu_data.pitch;
     vofa.val[8]=robot_geo.target_position_pitch;
-    vofa.val[9]=(float)HAL_GetTick();
-
+    vofa.val[9]=b2g_A.base_pitch;
 }
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){
@@ -629,6 +664,12 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
             break;
         case 0x06:
             parse_feedback_DM4310(msg, &motors.motor_pitch, 0x0D);
+            break;
+        case B2G_MSG_A_ID:
+            memcpy(&b2g_A, msg, 8);
+            break;
+        case B2G_MSG_B_ID:
+            memcpy(&b2g_B, msg, 8);
             break;
 
     default:

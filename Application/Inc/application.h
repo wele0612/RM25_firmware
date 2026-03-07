@@ -15,8 +15,6 @@
 
 #include <utils.h>
 
-#include <btb.h>
-
 #define VOFA_TAIL {0x00, 0x00, 0x80, 0x7f}
 
 #define ROBOT_CONFIG_ROM_ADDR (0x0)

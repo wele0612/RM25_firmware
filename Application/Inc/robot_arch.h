@@ -17,6 +17,14 @@
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
+            float left_current;
+            float right_current;
+
+            float yaw_m1;
+            float yaw_vel_imu;
+
+            float input_pitch_vel;
+
             float target_rpm_left;
             float target_rpm_right;
             float target_position_pitch;
@@ -147,6 +155,9 @@
             float T_LB;
             float T_RF;
             float T_RB;
+
+            float input_yaw_vel;
+            float input_pitch_vel;
 
             float gimbal_yaw_vel;
             float gimbal_yaw_pos;

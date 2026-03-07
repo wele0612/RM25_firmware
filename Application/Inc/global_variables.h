@@ -13,8 +13,6 @@
 #include <icm42688.h>
 #include <referee.h>
 
-#include <btb.h>
-
 typedef struct robot_VOFA_report_t{
     float val[10];
     unsigned char tail[4];
