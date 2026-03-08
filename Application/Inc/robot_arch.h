@@ -25,8 +25,7 @@
 
             float input_pitch_vel;
 
-            float target_rpm_left;
-            float target_rpm_right;
+            float target_flywheel_rpm;
             float target_position_pitch;
         }robot_ctrl_t;
         
@@ -159,6 +158,9 @@
             float input_yaw_vel;
             float input_pitch_vel;
 
+            float agi_vel;
+            float T_agi;
+
             float gimbal_yaw_vel;
             float gimbal_yaw_pos;
             float T_yaw;
@@ -183,6 +185,9 @@
 
             float target_gim_yaw_vel;
             float target_gim_yaw_pos;
+
+            float target_agi_vel;
+            // float target_agi_pos;
 
         }robot_ctrl_t;
     #endif

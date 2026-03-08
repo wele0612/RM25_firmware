@@ -128,12 +128,20 @@ PID_t gim_yaw_vel_pid={
 
 PID_t gim_yaw_pos_pid={
     .P=18.0f,
-    .I=10.0f,
+    .I=5.0f,
     .D=0.0f,
     .integral_max=0.01f
 };
 
-static const float robot_weight = 12.0f;
+PID_t agi_vel_pid={
+    .P=2.0f,
+    .D=0.0f,
+    .I=30.0f,
+    .integral_max=0.2f,
+};
+
+static const float agi_gear_ratio = 4.0f;
+static const float robot_weight = 12.0f; // kg
 
 enum {
     WBR_STANDBY=0, // All joints disabled. Default after power-up
@@ -170,6 +178,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     wbr_state = WBR_STANDBY;
 
     // ----------------- Gimbal / Feeder control -----------------
+    if(BTB_ONLINE && dr16.mouse.press_l){
+        geo->target_agi_vel = -12.0f;
+    }else{
+        geo->target_agi_vel = 0.0f;
+    }
+    geo->agi_vel = fmotor.agi.speed * (M2006_GEAR_RATIO/agi_gear_ratio*RPMtoRADS);
+    geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
+    
     geo->target_gim_yaw_pos += geo->input_yaw_vel*CTRL_DELTA_T;
     geo->target_gim_yaw_pos = wrap_to_pi(geo->target_gim_yaw_pos);
 
@@ -184,11 +200,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     // geo->gimbal_yaw_pos = fmotor.joint_yaw.position;
     geo->target_gim_yaw_vel = geo->input_yaw_vel + pid_cycle(&gim_yaw_pos_pid, wrap_to_pi(geo->target_gim_yaw_pos - geo->gimbal_yaw_pos), CTRL_DELTA_T);
     
-
     float thry_target_motor_vel = geo->target_gim_yaw_vel;
-    geo->T_yaw = friction_compensation(thry_target_motor_vel, 0.5f, (1/0.6f));
-    geo->T_yaw += pid_cycle(&gim_yaw_vel_pid, geo->target_gim_yaw_vel - geo->gimbal_yaw_vel, CTRL_DELTA_T);
 
+    if(BTB_ONLINE){
+        geo->T_yaw = friction_compensation(thry_target_motor_vel, 0.5f, (1/0.6f));
+        geo->T_yaw += pid_cycle(&gim_yaw_vel_pid, geo->target_gim_yaw_vel - geo->gimbal_yaw_vel, CTRL_DELTA_T);
+    }else{
+        geo->T_yaw = 0.0f;
+    }
 
     // ----------------- WBR Base control -----------------
 
@@ -410,13 +429,13 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    // fdcanx_send_data(&hfdcan1, M3508_CTRLID_ID1_4, \
-    //     set_current_M3508(wheel_tx_buf, 
-    //         0.0f, 
-    //         0.0f,
-    //         0.0f*(1.0f/M2006_TORQUE_CONSTANT), 
-    //         0.0f),
-    //     8);
+    fdcanx_send_data(&hfdcan1, M3508_CTRLID_ID1_4, \
+        set_current_M3508(wheel_tx_buf, 
+            0.0f, 
+            0.0f,
+            geo->T_agi*(1.0f/M2006_TORQUE_CONSTANT), 
+            0.0f),
+        8);
 
     fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
 
@@ -446,10 +465,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[5]=imu_data.acc[1];
     // vofa.val[6]=imu_data.acc[2];
 
-    vofa.val[4]=geo->target_gim_yaw_vel;
-    vofa.val[5]=geo->T_yaw;
+    vofa.val[4]=geo->agi_vel;
+    vofa.val[5]=geo->T_agi;
 
-    vofa.val[6]=geo->target_gim_yaw_vel;
+    vofa.val[6]=referee.shoot_data_0x0207.initial_speed;
     vofa.val[7]=geo->target_gim_yaw_pos;
 
     vofa.val[8]=geo->gimbal_yaw_vel;
@@ -485,6 +504,9 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case 0x202:
         parse_feedback_M3508(msg, &motors.wheel_R);
         break;
+    case 0x203:
+        parse_feedback_M3508(msg, &motors.agi);
+        break;
     case JOINT_LF_FEEDBACKID:
         parse_feedback_DM8009P(msg, &motors.joint_LF, JOINT_LF_CTRLID);
         break;
@@ -503,6 +525,7 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
 
     case G2B_MSG_A_ID:
         memcpy(&g2b_A, msg, 8);
+        BTB_UPDATE_CNTDOWN();
         break;
 
     default:
@@ -567,8 +590,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->yaw_m1 = imu_data.yaw;
 
     // set with target rpm
-    float target_left_rpm = 50.0f;
-    float target_right_rpm = -50.0f;
+    if(BTB_ONLINE){
+        geo->target_flywheel_rpm = 6600.0f;
+    }else{
+        geo->target_flywheel_rpm = 200.0f;
+    }
+
+    float target_left_rpm = geo->target_flywheel_rpm;
+    float target_right_rpm = -geo->target_flywheel_rpm;
 
     // find error
     float left_rpm_err = target_left_rpm - fmotor.wheel_left.speed;
@@ -639,7 +668,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
     // print speed
     vofa.val[0]=fmotor.wheel_left.speed;
-    vofa.val[1]=fmotor.wheel_right.speed;
+    vofa.val[1]=-fmotor.wheel_right.speed;
 
     // print current
     vofa.val[2]=fmotor.wheel_left.current;
@@ -667,9 +696,11 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
             break;
         case B2G_MSG_A_ID:
             memcpy(&b2g_A, msg, 8);
+            BTB_UPDATE_CNTDOWN();
             break;
         case B2G_MSG_B_ID:
             memcpy(&b2g_B, msg, 8);
+            BTB_UPDATE_CNTDOWN();
             break;
 
     default:

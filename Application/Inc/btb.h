@@ -36,4 +36,8 @@ typedef struct __attribute__((packed)) {
 __BTB_VAR b2g_B_t b2g_B;
 #define B2G_MSG_B_ID 0x21
 
+__BTB_VAR uint32_t btb_last_received;
+#define BTB_ONLINE (HAL_GetTick()-btb_last_received <= 20)
+#define BTB_UPDATE_CNTDOWN() do{btb_last_received = HAL_GetTick();}while(0)
+
 #endif
