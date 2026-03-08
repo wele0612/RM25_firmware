@@ -39,49 +39,91 @@ PID_t single_RB_wheel_velocity_pid={
 };
 
 void role_controller_init(){
-
+    robot_geo.vehicle_angle = 0.0f;
 }
 
+float get_body_omega(){
+    //the length of wheel to centre is 25 cm
+    //x and y are 17.6777
+    float LF_speed=motors.wheel_LF.speed*1.41421f/0.25f;
+    float LB_speed=motors.wheel_LB.speed*1.41421f/0.25f;
+    float RF_speed=motors.wheel_RF.speed*1.41421f/0.25f;
+    float RB_speed=motors.wheel_RB.speed*1.41421f/0.25f;
+    
+    return (LF_speed+LB_speed+RF_speed+RB_speed)/4.0f;  
+}   
 
 void role_controller_step(const float CTRL_DELTA_T){
     uint8_t tx_buffer[8]; 
     const float wheel_radius = 0.154f;
-
     const float target_rpm_coe = 60.0f/(2*PI*wheel_radius)*(1/M3508_GEAR_RATIO);
+    // const float robot_side = 0.3536f; //斜对角是50cm -> 侧面是35.36cm
 
     robot_geo.target_speed_x = target_rpm_coe*dr16.channel[0]*1.0f;
     robot_geo.target_speed_y = target_rpm_coe*dr16.channel[1]*1.0f;
     robot_geo.target_omega_yaw = 500.0f*dr16.channel[2];
 
-    const float target_rpm_lf=robot_geo.target_speed_y + robot_geo.target_speed_x + robot_geo.target_omega_yaw; 
-    const float target_rpm_lb=robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;
-    const float target_rpm_rf=-robot_geo.target_speed_y + robot_geo.target_speed_x + robot_geo.target_omega_yaw;
-    const float target_rpm_rb=-robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;   
+    if (dr16.s2 == DR16_SWITCH_MID) { // check if in the mode to max speed
+        robot_geo.target_omega_yaw = 1500.0f; // 1.5 rad/s
+    }
+
+    if (dr16.s2 == DR16_SWITCH_MID) {
+        //this is the angle of the vehicle, which has a w of 1.5 rad/s
+        // robot_geo.vehicle_angle += (imu_data.gyro[2]*DEGtoRAD*2.0f*CTRL_DELTA_T);
+        // // warp to pi:
+        // robot_geo.vehicle_angle = wrap_to_pi(robot_geo.vehicle_angle);
+
+        // float theta = robot_geo.vehicle_angle; 
+
+        // find the angular velocity with IMU
+        float omega = imu_data.gyro[2]*DEGtoRAD*2.0f;
+        // accumulate the angle
+        robot_geo.vehicle_angle += omega * CTRL_DELTA_T;
+        float theta = wrap_to_pi(robot_geo.vehicle_angle);
+        // do matrix
+        float vx = cosf(theta)*robot_geo.target_speed_x + sinf(theta)*robot_geo.target_speed_y;
+        float vy = - sinf(theta)*robot_geo.target_speed_x + cosf(theta)*robot_geo.target_speed_y;
+        robot_geo.target_speed_x = vx;
+        robot_geo.target_speed_y = vy;
+    }
+
+    if (dr16.s2 == DR16_SWITCH_UP) { // turn off everything but rotation
+        robot_geo.target_speed_x = 0.0f;
+        robot_geo.target_speed_y = 0.0f;
+        robot_geo.target_omega_yaw = 0.0f;
+    }
+
+    float target_rpm_lf=robot_geo.target_speed_y  + robot_geo.target_speed_x + robot_geo.target_omega_yaw; 
+    float target_rpm_lb=robot_geo.target_speed_y  - robot_geo.target_speed_x + robot_geo.target_omega_yaw;
+    float target_rpm_rf=-robot_geo.target_speed_y + robot_geo.target_speed_x + robot_geo.target_omega_yaw;
+    float target_rpm_rb=-robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;  
 
     float motor_lf_err=target_rpm_lf-motors.wheel_LF.speed;
     float motor_lb_err=target_rpm_lb-motors.wheel_LB.speed;
     float motor_rf_err=target_rpm_rf-motors.wheel_RF.speed;
     float motor_rb_err=target_rpm_rb-motors.wheel_RB.speed;
-    const float lf_torque = pid_cycle(&single_LF_wheel_velocity_pid, motor_lf_err, CTRL_DELTA_T);
-    const float lb_torque = pid_cycle(&single_LB_wheel_velocity_pid, motor_lb_err, CTRL_DELTA_T);
-    const float rf_torque = pid_cycle(&single_RF_wheel_velocity_pid, motor_rf_err, CTRL_DELTA_T);
-    const float rb_torque = pid_cycle(&single_RB_wheel_velocity_pid, motor_rb_err, CTRL_DELTA_T);
 
-    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_torque_M3508(tx_buffer,\
-        lf_torque, lb_torque, rf_torque, rb_torque), 8);
+    float lf_current = pid_cycle(&single_LF_wheel_velocity_pid, motor_lf_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
+    float lb_current = pid_cycle(&single_LB_wheel_velocity_pid, motor_lb_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
+    float rf_current = pid_cycle(&single_RF_wheel_velocity_pid, motor_rf_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
+    float rb_current = pid_cycle(&single_RB_wheel_velocity_pid, motor_rb_err, CTRL_DELTA_T) * (1/M3508_TORQUE_CONSTANT);
 
-    vofa.val[0]=imu_data.yaw;
-    vofa.val[1]=imu_data.pitch;
-    vofa.val[2]=imu_data.gyro[2];
-    vofa.val[3]=imu_data.gyro[1];
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buffer,\
+        lf_current, lb_current, rf_current, rb_current), 8);
 
-    vofa.val[4]=dr16.channel[0];
-    vofa.val[5]=dr16.channel[1];
-    vofa.val[6]=dr16.channel[2];
-    vofa.val[7]=dr16.channel[3];
+    vofa.val[0]=motors.wheel_LB.speed;
+    vofa.val[1]=motors.wheel_LF.speed;
+    vofa.val[2]=motors.wheel_RB.speed;
+    vofa.val[3]=motors.wheel_RF.speed;
 
-    vofa.val[8]=(float)robot_config.test_val;
-    vofa.val[9]=robot_config.imu_gyro_offset[2];
+    vofa.val[4]=imu_data.gyro[2]*DEGtoRAD*2.0f;  
+    vofa.val[5]=robot_geo.vehicle_angle;
+    vofa.val[6]=get_body_omega();
+    vofa.val[7]=dr16.channel[2];
+    vofa.val[8]=dr16.channel[3];
+
+    // vofa.val[8]=(float)robot_config.test_val;
+    // vofa.val[9]=robot_config.imu_gyro_offset[2];
 
     // vofa.val[8]=(float)dr16.s1;
     // vofa.val[9]=(float)dr16.s2;
