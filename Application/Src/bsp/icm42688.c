@@ -664,7 +664,7 @@ int icm_read_all_data_dma(float accel_data[3], float gyro_data[3])
 
 
 //============================ AHRS ===================================
-iir_filter_t iir[sizeof(imu_data_t)/4];
+iir_filter_t iir[6];
 
 // --- AHRS update ---
 int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD){
@@ -686,7 +686,7 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
 
     for(int i=0;i<3;i++){ // DO NOT filter Pitch, Yaw and Roll due to Warp-to-PI
         imu_clean->acc[i]=filter_iir_eval(&iir[i], imu->acc[i], 2, a, b);
-        imu_clean->gyro[i]=filter_iir_eval(&iir[i], imu->gyro[i], 2, a, b);
+        imu_clean->gyro[i]=filter_iir_eval(&iir[i+3], imu->gyro[i], 2, a, b);
     }
 
     float gyro_rad[3];
