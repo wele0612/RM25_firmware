@@ -76,7 +76,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         // float theta = robot_geo.vehicle_angle; 
 
         // find the angular velocity with IMU
-        float omega = imu_data.gyro[2]*DEGtoRAD*2.0f;
+        float omega = imu_data.gyro[2]*DEGtoRAD;
         // accumulate the angle
         robot_geo.vehicle_angle += omega * CTRL_DELTA_T;
         float theta = wrap_to_pi(robot_geo.vehicle_angle);
@@ -116,7 +116,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[2]=motors.wheel_RB.speed;
     vofa.val[3]=motors.wheel_RF.speed;
 
-    vofa.val[4]=imu_data.gyro[2]*DEGtoRAD*2.0f;  
+    vofa.val[4]=imu_data.gyro[2]*DEGtoRAD;  
     vofa.val[5]=robot_geo.vehicle_angle;
     vofa.val[6]=get_body_omega();
     vofa.val[7]=dr16.channel[2];
