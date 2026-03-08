@@ -51,5 +51,9 @@ typedef struct iir_filter_t{
 
 float filter_iir_eval(iir_filter_t* iir, const float x, const int order, const float a[4], const float b[4]);
 
+#define CRC8_INIT (0xff)
+#define CRC16_INIT (0xffff)
+unsigned char Get_CRC8_Check_Sum(unsigned char *pchMessage, unsigned int dwLength, unsigned char ucCRC8);
+uint16_t Get_CRC16_Check_Sum(const uint8_t *pchMessage, uint32_t dwLength, uint16_t wCRC);
 
 #endif

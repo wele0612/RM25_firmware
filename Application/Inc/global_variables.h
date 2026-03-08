@@ -43,6 +43,14 @@ __GLOBAL_VAR Referee_info_t referee;
 __GLOBAL_VAR Referee_info_t referee_prev;
 __GLOBAL_VAR uint8_t referee_buf[8];
 
+#ifdef CONFIG_PLATFORM_GIMBAL
+#include<vision.h>
+
+__GLOBAL_VAR McuToRosData_t vision_ToRos;
+__GLOBAL_VAR RosToMcuData_t vision_FromRos;
+
+#endif
+
 // -----------------------------------------------------
 // | State machines.                                   |
 // |                                                   |
