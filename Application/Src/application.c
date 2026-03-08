@@ -48,6 +48,7 @@ void robot_init(){
     can_bsp_init();
     HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32);
     HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
+    HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
 
     while(icm_init() != 0); //Init IMU
     robot_readconfig(&robot_config); //Read from flash
@@ -280,16 +281,17 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
         //HAL_UART_Transmit_DMA(&huart1, (uint8_t *)dr16.msg, 18);
         dr16_on_change();
 
-    // }else if(huart == AIMING_UART){
-    //     if(HAL_UARTEx_GetRxEventType(AIMING_UART) == HAL_UART_RXEVENT_HT){
-    //         return;
-    //     }
-    //     parse_aiming_receiver_msg(&aim);
-
+    }else if(huart == AIMING_UART){ // Using Baudrate 576000
+        #ifdef CONFIG_PLATFORM_GIMBAL
+        // vision_recv_byte()
+        static uint8_t reply;
+        reply = vision_uart_buf[0];
+        HAL_UART_Transmit_IT(AIMING_UART, &reply, 1);
+        HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
+        #endif
     }else if(huart == REFEREE_UART){
         referee_recv_byte(referee_buf[0]);
         HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
-
     }
 
 }

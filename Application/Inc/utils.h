@@ -1,6 +1,8 @@
 #ifndef __UTILS_H
 #define __UTILS_H
 
+#include<stdint.h>
+
 #define PI (3.1415926f)
 
 #define RADtoDEG (180.0f/PI)

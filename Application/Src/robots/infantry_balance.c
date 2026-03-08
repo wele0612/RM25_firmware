@@ -672,7 +672,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
 
     g2b_A.gimbal_yaw_vel_imu = geo->yaw_vel_imu;
-    fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
+    // fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
     // print speed
     vofa.val[0]=fmotor.wheel_left.speed;
     vofa.val[1]=-fmotor.wheel_right.speed;
