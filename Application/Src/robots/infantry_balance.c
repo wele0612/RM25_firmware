@@ -555,8 +555,8 @@ PID_t right_wheel={
 };
 
 PID_t pitch_omega_pid={
-    .P=4.0f,
-    .I=22.0f,
+    .P=3.5f,
+    .I=20.0f,
     .D=0.01f,
     .integral_max=0.1f
 };
@@ -662,6 +662,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // pitch_torque += 0.4528f * imu_data.pitch * imu_data.pitch - 0.2539f * imu_data.pitch + 1.1660f;
     pitch_torque += -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
 
+    // pitch_torque = -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
     fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
 
     g2b_A.gimbal_yaw_vel_imu = geo->yaw_vel_imu;

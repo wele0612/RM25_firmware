@@ -1,5 +1,7 @@
 #include <icm42688.h>
 
+#include <config.h>
+
 #include <utils.h>
 #include <global_variables.h>
 
@@ -19,7 +21,6 @@ static inline float clamp_f(float v, float lo, float hi){
     if (v > hi) return hi;
     return v;
 }
-
 
 // ---------- MahonyAHRS struct (merged & smoothed) ----------
 typedef struct {
@@ -289,6 +290,20 @@ typedef enum {
  * @return 0成功，-1失败
  */
 int icm_init(){
+    // 根据配置选择AAF带宽参数
+    // 在40kHz外部时钟下，实际带宽 = 标称带宽 × 1.25
+    #ifdef CONFIG_ENABLE_IMU_FLYWHEEL_FILTER
+        // 120Hz模式：使用DELT=2 (标称84Hz，实际105Hz，最接近120Hz)
+        #define AAF_DELT_VAL        2
+        #define AAF_DELTSQR_VAL     4       // 2^2
+        #define AAF_BITSHIFT_VAL    13
+    #else
+        // 标准800Hz模式：使用DELT=14 (标称634Hz，实际792.5Hz，最接近800Hz)
+        #define AAF_DELT_VAL        14
+        #define AAF_DELTSQR_VAL     196     // 14^2
+        #define AAF_BITSHIFT_VAL    7
+    #endif
+
     HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
 
     HAL_Delay(5); // 等待电源稳定
@@ -371,7 +386,7 @@ int icm_init(){
         return -1;
     }
 
-    // 6. 启用抗混叠滤波器
+    // 6. 启用并配置陀螺仪抗混叠滤波器 (AAF)
     // 切换到Bank 1配置陀螺仪抗混叠滤波器
     if(icm_set_bank(ICM42688_BANK_1) != 0) {
         return -1;
@@ -387,34 +402,57 @@ int icm_init(){
         return -1;
     }
 
+    // 配置陀螺仪AAF带宽参数 (根据CONFIG_ENABLE_IMU_FLYWHEEL_FILTER宏选择)
+    // GYRO_CONFIG_STATIC3 (0x0C): DELT值 (bits 5:0)
+    if(icm_write_byte(0x0C, (AAF_DELT_VAL & 0x3F)) != 0) return -1;
+    
+    // GYRO_CONFIG_STATIC4 (0x0D): DELTSQR低8位
+    if(icm_write_byte(0x0D, (AAF_DELTSQR_VAL & 0xFF)) != 0) return -1;
+    
+    // GYRO_CONFIG_STATIC5 (0x0E): BITSHIFT (bits 7:4) + DELTSQR高4位 (bits 3:0)
+    uint8_t gyro_static5 = ((AAF_BITSHIFT_VAL & 0x0F) << 4) | ((AAF_DELTSQR_VAL >> 8) & 0x0F);
+    if(icm_write_byte(0x0E, gyro_static5) != 0) return -1;
+
+    // 7. 启用并配置加速度计抗混叠滤波器 (AAF)
     // 切换到Bank 2配置加速度计抗混叠滤波器
     if(icm_set_bank(ICM42688_BANK_2) != 0) {
         return -1;
     }
     
-    // 启用加速度计抗混叠滤波器
+    // 启用加速度计抗混叠滤波器并配置DELT值
     uint8_t accel_config_static2;
     if(icm_read_byte(ICM42688_BANK2_ACCEL_CONFIG_STATIC2, &accel_config_static2) != 0) {
         return -1;
     }
-    accel_config_static2 &= ~0x01; // 清除ACCEL_AAF_DIS位 (0=启用抗混叠滤波器)
+    // 清除ACCEL_AAF_DIS位 (bit 0) 并设置DELT值到bits 6:1
+    accel_config_static2 &= ~0x01; // 启用滤波器 (0=启用)
+    accel_config_static2 &= ~0x7E; // 清除bits 6:1 (DELT字段)
+    accel_config_static2 |= ((AAF_DELT_VAL & 0x3F) << 1); // 设置DELT值
     if(icm_write_byte(ICM42688_BANK2_ACCEL_CONFIG_STATIC2, accel_config_static2) != 0) {
         return -1;
     }
+
+    // 配置加速度计AAF带宽参数 (DELTSQR和BITSHIFT)
+    // ACCEL_CONFIG_STATIC3 (0x04): DELTSQR低8位
+    if(icm_write_byte(0x04, (AAF_DELTSQR_VAL & 0xFF)) != 0) return -1;
+    
+    // ACCEL_CONFIG_STATIC4 (0x05): BITSHIFT (bits 7:4) + DELTSQR高4位 (bits 3:0)
+    uint8_t accel_static5 = ((AAF_BITSHIFT_VAL & 0x0F) << 4) | ((AAF_DELTSQR_VAL >> 8) & 0x0F);
+    if(icm_write_byte(0x05, accel_static5) != 0) return -1;
 
     // 切换回Bank 0
     if(icm_set_bank(ICM42688_BANK_0) != 0) {
         return -1;
     }
     
-    // --- Step 7: Enable accel + gyro in LN mode ---
+    // --- Step 8: Enable accel + gyro in LN mode ---
     uint8_t pwr_mgmt0 = (0x03 << 2) | 0x03; // Gyro LN + Accel LN
     if(icm_write_byte(ICM42688_PWR_MGMT0, pwr_mgmt0) != 0){
         return -1;
     }
     HAL_Delay(10); // wait sensors startup
 
-    // --- Step 8: Configure INT1 pin (active high, push-pull, pulse) ---
+    // --- Step 9: Configure INT1 pin (active high, push-pull, pulse) ---
     uint8_t int_config = 0;
     int_config |= (1 << 0); // INT1_POLARITY = 1 (active high)
     int_config |= (1 << 1); // INT1_DRIVE_CIRCUIT = 1 (push-pull)
@@ -437,7 +475,7 @@ int icm_init(){
         return -1;
     }
 
-    // --- Step 9: Enable Data Ready interrupt on INT1 ---
+    // --- Step 10: Enable Data Ready interrupt on INT1 ---
     // write exact value instead of OR to avoid junk bits
     //uint8_t int_source0 = 0x08; // UI_DRDY_INT1_EN = bit3
     uint8_t int_source0 = 0x18;
@@ -445,13 +483,18 @@ int icm_init(){
         return -1;
     }
 
-    // --- Step 10: Clear any pending interrupts by reading INT_STATUS ---
+    // --- Step 11: Clear any pending interrupts by reading INT_STATUS ---
     uint8_t dummy=0;
     icm_read_byte(ICM42688_INT_STATUS, &dummy);
 
     HAL_Delay(10);
 
     imu_state = IMU_RUNNING;
+
+    // 取消宏定义，避免污染全局命名空间
+    #undef AAF_DELT_VAL
+    #undef AAF_DELTSQR_VAL
+    #undef AAF_BITSHIFT_VAL
 
     return 0;
 }
@@ -609,6 +652,8 @@ int icm_read_all_data_dma(float accel_data[3], float gyro_data[3])
     gyro_data[0] = gyro_raw[0] / gyro_sensitivity;
     gyro_data[1] = gyro_raw[1] / gyro_sensitivity;
     gyro_data[2] = gyro_raw[2] / gyro_sensitivity;
+
+    
 
     // Call dma read at the end start reading at background
     if (icm_read_all_data_dma_begin() != 0)
