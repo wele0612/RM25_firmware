@@ -285,16 +285,19 @@ void role_controller_step(const float CTRL_DELTA_T){
     //     // geo->target_gim_yaw_vel = 0.0f;
     //     geo->target_gim_yaw_pos = 0.0f;
     // }
-    const float input_mouse_alpha = 0.06f;
+    const float input_mouse_alpha = 0.03f;
     geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*0.02f*input_mouse_alpha;
     geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*0.02f*input_mouse_alpha;
+    
+    // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.channel[1]*input_mouse_alpha;
+    // geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + dr16.channel[0]*input_mouse_alpha;
     
 
     if(wbr_state == WBR_CONST_VEL){
         geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
         geo->target_L_leg_omega = 1.5f * dr16.channel[2];
-        geo->target_R_length = 0.22f + 0.08f*dr16.channel[1];
-        geo->target_R_leg_omega = 1.5f * dr16.channel[0];
+        geo->target_R_length = 0.22f + 0.08f*dr16.channel[3];
+        geo->target_R_leg_omega = 1.5f * dr16.channel[2];
 
     }else if(wbr_state == WBR_LQR_PREP){
         geo->target_L_length = 0.19f;
@@ -471,8 +474,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[6]=referee.shoot_data_0x0207.initial_speed;
     vofa.val[7]=geo->target_gim_yaw_pos;
 
-    vofa.val[8]=geo->gimbal_yaw_vel;
-    vofa.val[9]=geo->gimbal_yaw_pos;
+    vofa.val[8]=geo->gimbal_yaw_vel*RADtoDEG;
+    vofa.val[9]=geo->gimbal_yaw_pos*RADtoDEG;
 
     // vofa.val[6]=geo->F_support_thry;
     // vofa.val[7]=geo->F_wheel_support;
@@ -555,16 +558,16 @@ PID_t right_wheel={
 };
 
 PID_t pitch_omega_pid={
-    .P=3.5f,
-    .I=20.0f,
+    .P=2.2f,
+    .I=80.0f,
     .D=0.01f,
-    .integral_max=0.1f
+    .integral_max=0.02f
 };
 
 PID_t pitch_pos_pid={
-    .P=12.0f,
+    .P=25.0f,
     .I=0.0f,
-    .D=0.03f,
+    .D=0.1f,
     .integral_max=0.01f
 };
 
@@ -591,7 +594,8 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // set with target rpm
     if(BTB_ONLINE){
-        geo->target_flywheel_rpm = 6600.0f;
+        // geo->target_flywheel_rpm = 6600.0f;
+        geo->target_flywheel_rpm = 600.0f;
     }else{
         geo->target_flywheel_rpm = 200.0f;
     }
@@ -634,18 +638,22 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
 
     // hook unit step response:
-    // if (dr16.channel[1] > 0.5f) {
+    // if (geo->input_pitch_vel > 0.5f) {
     //     robot_geo.target_position_pitch = 0.4f;
-    // } else if (dr16.channel[1] < -0.5f) {
-    //     robot_geo.target_position_pitch = -0.5f;
+    //     // target_speed_pitch = 1.0f;
+    // } else if (geo->input_pitch_vel < -0.5f) {
+    //     robot_geo.target_position_pitch = -0.3f;
+    //     // target_speed_pitch = -1.0f;
     // } else {
     //     robot_geo.target_position_pitch = 0.0f;
+    //     // target_speed_pitch = 0.0f;
     // }
 
     const float target_pitch = robot_geo.target_position_pitch;
     float pitch_pos_err = target_pitch - imu_data.pitch;
 
-    target_speed_pitch = limit_val(geo->input_pitch_vel*0.7f + pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 10.0f);
+    target_speed_pitch = limit_val(geo->input_pitch_vel + pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 10.0f);
+    // target_speed_pitch = limit_val(pid_cycle(&pitch_pos_pid, pitch_pos_err, CTRL_DELTA_T), 10.0f);
 
     // find pitch speed error
     float pitch_speed_err = 0.0f;
@@ -655,15 +663,13 @@ void role_controller_step(const float CTRL_DELTA_T){
         pitch_speed_err = target_speed_pitch - imu_data.gyro[1]*(PI/180.0f);
     }
 
-    // target_speed_pitch = -dr16.channel[1] * 2.0f;
     float pitch_torque = pid_cycle(&pitch_omega_pid, pitch_speed_err, CTRL_DELTA_T);
 
     // add feedforward 
-    // pitch_torque += 0.4528f * imu_data.pitch * imu_data.pitch - 0.2539f * imu_data.pitch + 1.1660f;
     pitch_torque += -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
 
-    // pitch_torque = -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
-    fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
+    pitch_torque = -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
+    // fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
 
     g2b_A.gimbal_yaw_vel_imu = geo->yaw_vel_imu;
     fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
@@ -678,7 +684,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // pid for speed ring
     vofa.val[4]=target_speed_pitch;
     vofa.val[5]=imu_data.gyro[1]*DEGtoRAD;
-    vofa.val[6]=pitch_torque;
+    vofa.val[6]=imu_data.gyro[2]*DEGtoRAD;
     vofa.val[7]=imu_data.pitch;
     vofa.val[8]=robot_geo.target_position_pitch;
     vofa.val[9]=b2g_A.base_pitch;
