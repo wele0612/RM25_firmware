@@ -678,14 +678,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[1]=-fmotor.wheel_right.speed;
 
     // print current
-    vofa.val[2]=fmotor.wheel_left.current;
+    vofa.val[2]=vision_FromRos.packet.z;
     vofa.val[3]=geo->input_pitch_vel;
 
-    // pid for speed ring
+    // pid for speed loop
     vofa.val[4]=target_speed_pitch;
-    vofa.val[5]=imu_data.gyro[1]*DEGtoRAD;
-    vofa.val[6]=imu_data.gyro[2]*DEGtoRAD;
-    vofa.val[7]=imu_data.pitch;
+    vofa.val[5]=imu_data.yaw;
+    vofa.val[6]=imu_data.pitch;
+    vofa.val[7]=imu_data.roll;
     vofa.val[8]=robot_geo.target_position_pitch;
     vofa.val[9]=b2g_A.base_pitch;
 }

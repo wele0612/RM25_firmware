@@ -283,10 +283,7 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
 
     }else if(huart == AIMING_UART){ // Using Baudrate 576000
         #ifdef CONFIG_PLATFORM_GIMBAL
-        // vision_recv_byte()
-        static uint8_t reply;
-        reply = vision_uart_buf[0];
-        HAL_UART_Transmit_IT(AIMING_UART, &reply, 1);
+        vision_recv_byte(vision_uart_buf[0]);
         HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
         #endif
     }else if(huart == REFEREE_UART){
