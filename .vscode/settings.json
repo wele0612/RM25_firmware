@@ -54,5 +54,6 @@
         "buzzer.h": "c",
         "config.h": "c",
         "global_variables.h": "c"
-    }
+    },
+    "ros.distro": "kilted"
 }
