@@ -136,8 +136,8 @@ PID_t gim_yaw_pos_pid={
 PID_t agi_vel_pid={
     .P=2.0f,
     .D=0.0f,
-    .I=30.0f,
-    .integral_max=0.2f,
+    .I=50.0f,
+    .integral_max=0.3f,
 };
 
 static const float agi_gear_ratio = 4.0f;
@@ -178,11 +178,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     wbr_state = WBR_STANDBY;
 
     // ----------------- Gimbal / Feeder control -----------------
-    if(BTB_ONLINE && dr16.mouse.press_l){
-        geo->target_agi_vel = -12.0f;
-    }else{
-        geo->target_agi_vel = 0.0f;
-    }
+    
     geo->agi_vel = fmotor.agi.speed * (M2006_GEAR_RATIO/agi_gear_ratio*RPMtoRADS);
     geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
     
@@ -291,7 +287,15 @@ void role_controller_step(const float CTRL_DELTA_T){
     
     // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.channel[1]*input_mouse_alpha;
     // geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + dr16.channel[0]*input_mouse_alpha;
-    
+    if(BTB_ONLINE && dr16.mouse.press_l){
+        geo->target_agi_vel = -12.0f;
+    }else if(BTB_ONLINE && dr16.mouse.press_r){
+        geo->target_agi_vel = 1.0f;
+    }else{
+        geo->target_agi_vel = 0.0f;
+    }
+
+    b2g_B.flywheel_enabled = (dr16.s2 == DR16_SWITCH_UP);
 
     if(wbr_state == WBR_CONST_VEL){
         geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
@@ -328,6 +332,8 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->wheel_thy_vel_L = wheel_thy_vel_dphi;
         geo->wheel_thy_vel_R = wheel_thy_vel_dphi;
     }
+
+
 
 
     // ==================== Update Controllers =====================
@@ -469,7 +475,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[6]=imu_data.acc[2];
 
     vofa.val[4]=geo->agi_vel;
-    vofa.val[5]=geo->T_agi;
+    vofa.val[5]=fmotor.agi.current;
 
     vofa.val[6]=referee.shoot_data_0x0207.initial_speed;
     vofa.val[7]=geo->target_gim_yaw_pos;
@@ -594,8 +600,11 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // set with target rpm
     if(BTB_ONLINE){
-        // geo->target_flywheel_rpm = 6600.0f;
-        geo->target_flywheel_rpm = 600.0f;
+        if(b2g_B.flywheel_enabled){
+            geo->target_flywheel_rpm = 6600.0f;
+        }else{
+            geo->target_flywheel_rpm = 800.0f;
+        }
     }else{
         geo->target_flywheel_rpm = 200.0f;
     }
@@ -668,11 +677,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     // add feedforward 
     pitch_torque += -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
 
-    pitch_torque = -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
-    // fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
+    // pitch_torque = -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
+    fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
 
     g2b_A.gimbal_yaw_vel_imu = geo->yaw_vel_imu;
-    // fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
+    fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
     // print speed
     vofa.val[0]=fmotor.wheel_left.speed;
     vofa.val[1]=-fmotor.wheel_right.speed;
