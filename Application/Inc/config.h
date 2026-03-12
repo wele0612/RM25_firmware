@@ -7,14 +7,18 @@
 
 
 //========= Choose Robot ===========
-#define CONFIG_ROBOT_INFANTRY_BALANCE
+// #define CONFIG_ROBOT_INFANTRY_BALANCE
 //#define CONFIG_ROBOT_INFANTRY_OMNI
-// #define CONFIG_ROBOT_HERO
+#define CONFIG_ROBOT_HERO
 // #define CONFIG_ROBOT_AIMING_BENCH
 
 
 //========= IMU Options ===========
 #if defined(CONFIG_ROBOT_INFANTRY_BALANCE) && defined(CONFIG_PLATFORM_GIMBAL)
+    #define CONFIG_ENABLE_IMU_FLYWHEEL_FILTER
+#endif
+
+#if defined(CONFIG_ROBOT_HERO) && defined(CONFIG_PLATFORM_GIMBAL)
     #define CONFIG_ENABLE_IMU_FLYWHEEL_FILTER
 #endif
 

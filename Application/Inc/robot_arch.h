@@ -37,6 +37,12 @@
     
     #ifdef CONFIG_ROBOT_HERO
         // GIMBAL + HERO configuration
+        #define PITCH_CTRL_ID (MYACT_CTRLID_SINGLE+0x5)
+        #define FOLD_CTRL_ID (MYACT_CTRLID_SINGLE+0x6)
+
+        #define PITCH_RPT_ID (MYACT_RPTID+0x5)
+        #define FOLD_RPT_ID 
+
         typedef struct robot_motors_t{
             report_M3508_t flywheel_1; // ID = 1
             report_M3508_t flywheel_2; // ID = 2
@@ -44,11 +50,29 @@
 
             report_M2006_t feeder_top; // ID = 4
 
+            report_X4_36_t pitch; // ID = 5
+            report_X4_36_t fold;  // ID = 6
+
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{ // All units SI, unless specified.
             float feeder_position;
             float feeder_vel;
+
+            float input_pitch_vel;
+
+            float pitch_vel;
+            float pitch_pos;
+
+            float T_pitch;
+            
+            // Gimbal Control Mode
+            float target_pitch_vel;
+            float target_pitch_pos;
+
+            // Gimbal Folding Motor Mode
+            float target_mp_vel;
+            float target_mp_pos;
 
             float target_flywheel_rpm; // RPM
             float target_feeder_vel;
@@ -199,12 +223,61 @@
     
     #ifdef CONFIG_ROBOT_HERO
         // BASE + HERO configuration
-        typedef struct robot_motors_t{
+        #define YAW_CTRLID 0x04
+        #define AGI_CTRLID 0x05
 
+        #define YAW_FEEDBACKID 0x0C
+        #define AGI_FEEDBACKID 0x0D
+        typedef struct robot_motors_t{
+            report_M3508_t wheel_LF; // ID = 1
+            report_M3508_t wheel_LB; // ID = 2
+            report_M3508_t wheel_RF; // ID = 3
+            report_M3508_t wheel_RB; // ID = 4
+
+            report_DM4310_t agi; // DM4340
+            report_DM4310_t yaw; // DM4310
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
- 
+            float vx_b;
+            float vy_b;
+            float vyaw_gyro;
+            float vyaw_wheel;
+
+            float vx;
+            float vy;
+
+            float agi_vel;
+            float agi_pos;
+
+            float gimbal_yaw_vel;
+            float gimbal_yaw_pos;
+            float input_pitch_vel;
+
+            float F_x;  // Gimbal coordinate system
+            float F_y;  // Gimbal coordinate system
+            float F_x_b; // Body coordinate system
+            float F_y_b; // Body coordinate system
+            float T_base_yaw; // Yaw torque on the BASE, NOT gimbal yaw motor!
+
+            float T_LF;
+            float T_LB;
+            float T_RF;
+            float T_RB;
+
+            float T_yaw; // Yaw torque on gimbal yaw motor.
+
+            float T_agi;
+            
+            float target_vx;
+            float target_vy;
+            float target_vyaw;
+
+            float target_yaw_vel;
+            float target_yaw_pos;
+
+            float target_agi_vel;
+            float target_agi_pos;
         }robot_ctrl_t;
     #endif
     

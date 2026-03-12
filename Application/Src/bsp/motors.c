@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include <utils.h>
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -433,3 +435,45 @@ void parse_feedback_M1505B(uint8_t *msg, report_M1505B_t *rpt){
     rpt->angle = (float)(angle*(360.0f/32768.0f));
 }
 
+/* ============= X4-36 ============= */
+
+static inline uint8_t *set_current_MyAct(uint8_t *msg, float current){
+    if(current > 327.00f){
+        current = 327.00f;
+    }else if(current < -327.00f){
+        current = -327.00f;
+    }
+    
+    int16_t iqControl=(int16_t)(current*100.0f);
+    msg[0]=MYACT_CMD_TORQUE_LOOP;
+    msg[1]=0x00;
+    msg[2]=0x00;
+    msg[3]=0x00;
+    msg[4]=(uint8_t)(iqControl & 0xFF);
+    msg[5]=(uint8_t )(iqControl >> 8);
+    msg[6]=0x00;
+    msg[7]=0x00;
+    return msg;
+}
+
+uint8_t *set_torque_X4_36(uint8_t *msg, float torque){
+    set_current_MyAct(msg, torque * (1.0f/X4_36_TORQUE_CONSTANT) );
+    return msg;
+}
+
+void parse_feedback_X4_36(uint8_t *msg, report_X4_36_t *rpt){
+    int8_t tempreture = msg[1];
+    int16_t iq = ((int16_t)msg[3] << 8) | msg[2];
+    int16_t speed = ((int16_t)msg[5] << 8) | msg[4];
+    int16_t degree = ((int16_t)msg[7] << 8) | msg[6];
+
+    rpt->tempreture = tempreture;
+    rpt->current_actual = iq * 0.01f;
+    rpt->speed = speed * (0.01f * DEGtoRAD);
+    rpt->position = degree * DEGtoRAD;
+}
+
+uint8_t *disable_MyAct(uint8_t *msg){
+    memset(msg, 0x0, 8);
+    msg[0]=MYACT_CMD_DISABLE_MOTOR;
+}

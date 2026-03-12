@@ -4,6 +4,8 @@
 #include<stdint.h>
 
 /* =============== M3508/M2006 ================ */
+// 大疆
+
 #define M3508_CTRLID_ID1_4     0x200
 #define M3508_CTRLID_ID5_8     0x1FF
 
@@ -34,16 +36,9 @@ uint8_t *set_current_M3508(uint8_t *buf, float m1_current, float m2_current, flo
 void parse_feedback_M3508(uint8_t *msg, report_M3508_t *rpt);
 
 /* =============== DM motors =============== */
+// 达妙科技
 // ISSUE on ALL Damiao motors: The default position ranges from -12.5 ~ 12.5,
 // SET this value to multiples of PI on new motors!
-// typedef struct report_DM4310_t{
-// 	float speed;
-// 	float position;
-// 	float torque_actual;
-
-// 	uint8_t recvbuf[8];
-// 	uint8_t tranmitbuf[8];
-// }report_DM4310_t;
 
 typedef struct report_DM_Joint_t{
 	float speed;
@@ -67,6 +62,7 @@ void parse_feedback_DM4310(uint8_t *msg, report_DM4310_t *rpt, uint8_t head_id);
 void parse_feedback_DM8009P(uint8_t *msg, report_DM8009P_t *rpt, uint8_t head_id);
 
 /* =============== M0603A =============== */
+// 本末科技
 #define M0603A_CTRLID_SETMODE		0xA0
 #define M0603A_CTRLID_TURN			0x64
 #define M0603A_CTRLID_TURN_FEEDBACK	0x65
@@ -187,5 +183,39 @@ typedef struct report_M1505B_t
 }report_M1505B_t;
 
 void parse_feedback_M1505B(uint8_t *msg, report_M1505B_t *rpt);
+
+/* =============== MyActuator Motors =============== */
+// 脉塔智能
+
+// CAN ID = Base ID + Motor ID offset. E.g. 0x240+3=0x243
+#define MYACT_CTRLID_SINGLE		0x140
+#define MYACT_CTRLID_ALL		0x280
+#define MYACT_RPTID				0x240
+
+#define MYCAT_CMD_SET_ENCZERO	0x63
+#define MYACT_CMD_DISABLE_MOTOR	0x80
+#define MYACT_CMD_TORQUE_LOOP	0xA1
+
+#define X4_36_GEAR_RATIO	(1/36.0f)
+#define X4_36_TORQUE_CONSTANT	(1.9f) //Nm/A, GearBox included
+
+uint8_t *set_torque_X4_36(uint8_t *msg, float torque);
+
+typedef struct report_MyAct_Joint_t{
+	float speed;
+	float position;
+	float current_actual;
+	int8_t tempreture;
+
+	uint8_t tranmitbuf[8];
+}report_MyAct_Joint_t;
+
+typedef struct report_MyAct_Joint_t report_X4_36_t;
+
+void parse_feedback_X4_36(uint8_t *msg, report_X4_36_t *rpt);
+
+uint8_t *disable_MyAct(uint8_t *msg);
+
+// #define X4_36_ENCODER_LINES ()
 
 #endif
