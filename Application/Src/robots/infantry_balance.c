@@ -333,9 +333,6 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->wheel_thy_vel_R = wheel_thy_vel_dphi;
     }
 
-
-
-
     // ==================== Update Controllers =====================
 
     if(wbr_state == WBR_CONST_VEL || wbr_state == WBR_LQR_PREP){

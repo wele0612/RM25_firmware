@@ -61,8 +61,13 @@
 
             float input_pitch_vel;
 
-            float pitch_vel;
-            float pitch_pos;
+            float yaw_vel_imu;
+            float yaw_m1;
+
+            float mtr_pitch_vel;
+            float abs_pitch_vel;
+            float mtr_pitch_pos; // Motor encoder pitch
+            float abs_pitch_pos; // IMU pitch
 
             float T_pitch;
             
@@ -251,7 +256,9 @@
             float agi_pos;
 
             float gimbal_yaw_vel;
-            float gimbal_yaw_pos;
+            float gimbal_abs_yaw_pos; // Yaw in World coordinate
+            float gimbal_mtr_yaw_pos; // Yaw in body coordinate (from motor encoder)
+            float input_yaw_vel;
             float input_pitch_vel;
 
             float F_x;  // Gimbal coordinate system
@@ -273,8 +280,8 @@
             float target_vy;
             float target_vyaw;
 
-            float target_yaw_vel;
-            float target_yaw_pos;
+            float target_yaw_vel; // Gimbal Yaw vel
+            float target_yaw_pos; // Gimbal Yaw pos
 
             float target_agi_vel;
             float target_agi_pos;

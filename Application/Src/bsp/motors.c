@@ -437,6 +437,27 @@ void parse_feedback_M1505B(uint8_t *msg, report_M1505B_t *rpt){
 
 /* ============= X4-36 ============= */
 
+/**
+ * @param speed Deg/s
+ */
+uint8_t *set_speed_MyAct(uint8_t *msg, float speed, uint8_t max_torque){
+    if(speed > 327.00f){
+        speed = 327.00f;
+    }else if(speed < -327.00f){
+        speed = -327.00f;
+    }
+    int32_t speedControl = (int32_t)(speed*100.0f);
+
+    msg[0]=MYACT_CMD_SPEED_LOOP;
+    msg[1]=max_torque;
+    msg[2]=0x00;
+    msg[3]=0x00;
+    msg[4]=(uint8_t)(speedControl & 0xFF);
+    msg[5]=(uint8_t )(speedControl >> 8);
+    msg[6]=(uint8_t )(speedControl >> 16);
+    msg[7]=(uint8_t )(speedControl >> 24);
+}
+
 static inline uint8_t *set_current_MyAct(uint8_t *msg, float current){
     if(current > 327.00f){
         current = 327.00f;
@@ -475,7 +496,7 @@ uint8_t *acquire_motor_angle_MyAct(uint8_t *msg){
 
 void parse_feedback_X4_36(uint8_t *msg, report_X4_36_t *rpt){
     uint8_t CMD=msg[0];
-    if(CMD == MYACT_CMD_TORQUE_LOOP){
+    if(CMD == MYACT_CMD_TORQUE_LOOP || CMD == MYACT_CMD_SPEED_LOOP ){
         int8_t tempreture = msg[1];
         int16_t iq = ((int16_t)msg[3] << 8) | msg[2];
         int16_t speed = ((int16_t)msg[5] << 8) | msg[4];
