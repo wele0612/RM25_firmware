@@ -461,16 +461,37 @@ uint8_t *set_torque_X4_36(uint8_t *msg, float torque){
     return msg;
 }
 
-void parse_feedback_X4_36(uint8_t *msg, report_X4_36_t *rpt){
-    int8_t tempreture = msg[1];
-    int16_t iq = ((int16_t)msg[3] << 8) | msg[2];
-    int16_t speed = ((int16_t)msg[5] << 8) | msg[4];
-    int16_t degree = ((int16_t)msg[7] << 8) | msg[6];
+uint8_t *acquire_motor_angle_MyAct(uint8_t *msg){
+    msg[0]=MYACT_CMD_ACQUIRE_POS;
+    msg[1]=0x00;
+    msg[2]=0x00;
+    msg[3]=0x00;
+    msg[4]=0x00;
+    msg[5]=0x00;
+    msg[6]=0x00;
+    msg[7]=0x00;
+    return msg;
+}
 
-    rpt->tempreture = tempreture;
-    rpt->current_actual = iq * 0.01f;
-    rpt->speed = speed * (0.01f * DEGtoRAD);
-    rpt->position = degree * DEGtoRAD;
+void parse_feedback_X4_36(uint8_t *msg, report_X4_36_t *rpt){
+    uint8_t CMD=msg[0];
+    if(CMD == MYACT_CMD_TORQUE_LOOP){
+        int8_t tempreture = msg[1];
+        int16_t iq = ((int16_t)msg[3] << 8) | msg[2];
+        int16_t speed = ((int16_t)msg[5] << 8) | msg[4];
+        int16_t degree = ((int16_t)msg[7] << 8) | msg[6];
+
+        rpt->tempreture = tempreture;
+        rpt->current_actual = iq * 0.01f;
+        rpt->speed = speed * DEGtoRAD;
+        rpt->position = degree * DEGtoRAD;
+    }else if(CMD == MYACT_CMD_ACQUIRE_POS){
+        int32_t motorAngle = ((int16_t)msg[7] << 24) |
+                            ((int16_t)msg[6] << 16) |
+                            ((int16_t)msg[5] << 8) | msg[4];
+
+        rpt->precise_position = motorAngle*(0.01f*DEGtoRAD);
+    }
 }
 
 uint8_t *disable_MyAct(uint8_t *msg){

@@ -195,15 +195,19 @@ void parse_feedback_M1505B(uint8_t *msg, report_M1505B_t *rpt);
 #define MYCAT_CMD_SET_ENCZERO	0x63
 #define MYACT_CMD_DISABLE_MOTOR	0x80
 #define MYACT_CMD_TORQUE_LOOP	0xA1
+#define MYACT_CMD_ACQUIRE_POS	0x92
 
 #define X4_36_GEAR_RATIO	(1/36.0f)
 #define X4_36_TORQUE_CONSTANT	(1.9f) //Nm/A, GearBox included
 
 uint8_t *set_torque_X4_36(uint8_t *msg, float torque);
 
+uint8_t *acquire_motor_angle_MyAct(uint8_t *msg);
+
 typedef struct report_MyAct_Joint_t{
 	float speed;
 	float position;
+	float precise_position; // Acquired by 0x92 CMD
 	float current_actual;
 	int8_t tempreture;
 
