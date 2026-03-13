@@ -438,6 +438,24 @@ void parse_feedback_M1505B(uint8_t *msg, report_M1505B_t *rpt){
 /* ============= X4-36 ============= */
 
 /**
+ * @param degree Position in degree
+ * @param speed Deg/s
+ */
+uint8_t *set_position_MyAct(uint8_t *msg, float degree, float speed){
+    int32_t angleControl = (int32_t)(degree*100.0f);
+    uint16_t maxSpeed=(uint16_t)speed;
+
+    msg[0]=MYACT_CMD_POSITION_LOOP;
+    msg[1]=0x00;
+    msg[2]=(uint8_t)(maxSpeed & 0xFF);
+    msg[3]=(uint8_t )(maxSpeed >> 8);
+    msg[4]=(uint8_t)(angleControl & 0xFF);
+    msg[5]=(uint8_t )(angleControl >> 8);
+    msg[6]=(uint8_t )(angleControl >> 16);
+    msg[7]=(uint8_t )(angleControl >> 24);
+}
+
+/**
  * @param speed Deg/s
  */
 uint8_t *set_speed_MyAct(uint8_t *msg, float speed, uint8_t max_torque){
@@ -496,7 +514,9 @@ uint8_t *acquire_motor_angle_MyAct(uint8_t *msg){
 
 void parse_feedback_X4_36(uint8_t *msg, report_X4_36_t *rpt){
     uint8_t CMD=msg[0];
-    if(CMD == MYACT_CMD_TORQUE_LOOP || CMD == MYACT_CMD_SPEED_LOOP ){
+    if(CMD == MYACT_CMD_TORQUE_LOOP 
+        || CMD == MYACT_CMD_SPEED_LOOP 
+        || CMD == MYACT_CMD_POSITION_LOOP){
         int8_t tempreture = msg[1];
         int16_t iq = ((int16_t)msg[3] << 8) | msg[2];
         int16_t speed = ((int16_t)msg[5] << 8) | msg[4];

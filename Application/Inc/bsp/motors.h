@@ -196,11 +196,13 @@ void parse_feedback_M1505B(uint8_t *msg, report_M1505B_t *rpt);
 #define MYACT_CMD_DISABLE_MOTOR	0x80
 #define MYACT_CMD_TORQUE_LOOP	0xA1
 #define MYACT_CMD_SPEED_LOOP	0xA2
+#define MYACT_CMD_POSITION_LOOP 0xA4
 #define MYACT_CMD_ACQUIRE_POS	0x92
 
 #define X4_36_GEAR_RATIO	(1/36.0f)
 #define X4_36_TORQUE_CONSTANT	(1.9f) //Nm/A, GearBox included
 
+uint8_t *set_position_MyAct(uint8_t *msg, float degree, float speed);
 uint8_t *set_speed_MyAct(uint8_t *msg, float speed, uint8_t max_torque);
 uint8_t *set_torque_X4_36(uint8_t *msg, float torque);
 
