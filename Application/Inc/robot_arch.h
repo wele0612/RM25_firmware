@@ -69,6 +69,8 @@
             float mtr_pitch_pos; // Motor encoder pitch
             float abs_pitch_pos; // IMU pitch
 
+            float mtr_fold_pos;
+
             float T_pitch;
             
             // Gimbal Control Mode
@@ -260,6 +262,7 @@
             float gimbal_abs_yaw_pos; // Yaw in World coordinate
             float gimbal_mtr_yaw_pos; // Yaw in body coordinate (from motor encoder)
             float gimbal_mtr_pitch_pos;
+            float gimbal_mtr_fold_pos;
             float input_yaw_vel;
             float input_pitch_vel;
 

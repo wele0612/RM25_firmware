@@ -6,41 +6,42 @@
 #include<stdlib.h>
 
 #include<motors.h>
+#include<servo_pwm.h>
 #include<btb.h>
 #include<h7can.h>
 
 #ifdef CONFIG_ROBOT_HERO
 
-typedef enum {
-    GIMBAL_IMU_MODE = 0, // Normal IMU-based pitch control
-    GIMBAL_SNIPER_MODE = 1, // Sniper mode, use absolute encoder value
-    GIMBAL_FOLD_MODE = 2 // Folding mode, keep motor at position (-199.5 deg)
-}gimbal_mode_t;
+enum {
+    GIM_STANDBY = 0,
+    GIM_IMU_PREP_FOLDRISE = 1,
+    GIM_IMU_PREP_GIMDOWN = 2,
+    GIM_IMU = 3,
+    GIM_FOLD_PREP = 4,
+    GIM_FOLD = 5,
+    GIM_SNIPER = 6, // 吊射模式
+}gim_state;
+
+const float FOLD_MODE_PITCH_MOTOR_RAD = 129.0f*DEGtoRAD;
 
 #ifdef CONFIG_PLATFORM_BASE
 
-enum {
-    GIM_STANDBY = 0,
-    GIM_IMU_PREP = 1,
-    GIM_IMU = 2,
-    GIM_FOLD_PREP = 3,
-    GIM_FOLD = 4,
-    GIM_SNIPER = 5, // 吊射模式
-}gim_state;
-
 const float AGI_INIT_SETPOINT = 2.266f;
+uint32_t base_startup_time = 0;
 
 static void inline init_agi_damiao(){
     fdcanx_send_data(&hfdcan3, AGI_CTRLID, enable_DM_Joint(motors.agi.tranmitbuf), 8);
 }
 
 void role_controller_init(){
-    gim_state = GIM_IMU;
+    gim_state = GIM_STANDBY;
 
     HAL_Delay(1500);
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
     HAL_Delay(2);
     init_agi_damiao();
+
+    base_startup_time = HAL_GetTick();
 
 }
 
@@ -92,9 +93,9 @@ PID_t g_gimbal_yaw_pos_pid={
 
 PID_t f_gimbal_yaw_vel_pid={
     .P = 1.5f,
-    .I = 30.0f,
+    .I = 20.0f,
     .D = 0.0f,
-    .integral_max = 0.1f
+    .integral_max = 0.15f
 };
 
 PID_t f_gimbal_yaw_pos_pid={
@@ -118,6 +119,14 @@ PID_t agi_pos_pid={
     .D = 0.0f,
     .integral_max = 0.1f
 };
+
+const float gimbal_standby_position = 68.4f*DEGtoRAD;
+
+/* Usually, during folding stage, Yaw should turn to a specific position relative to body.
+   However, gimbal could enter a folding stage just after power-up. 
+   In this case, Yaw should not turn (even in a folding stage!) until gimbal enter a stable mode.
+*/
+int enable_folding_fixed_gimbal = 0;
 
 void role_controller_step(const float CTRL_DELTA_T){
     robot_ctrl_t *geo = &robot_geo;
@@ -163,7 +172,10 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     /* Gimbal control */
 
+    const float gimbal_folding_position_error = wrap_to_pi(gimbal_standby_position - geo->gimbal_mtr_yaw_pos);
+
     geo->gimbal_mtr_pitch_pos = (float)(g2b_A.gimbal_pitch)*1E-4f;
+    geo->gimbal_mtr_fold_pos = (float)(g2b_A.gimbal_fold)*1E-4f;
     const float dm_motor_alpha = 0.2f;
     geo->gimbal_mtr_yaw_vel = dm_motor_alpha*fmotor.yaw.speed + (1.0f-dm_motor_alpha)*geo->gimbal_mtr_yaw_vel;
     geo->gimbal_mtr_yaw_pos = wrap_to_pi(fmotor.yaw.position);
@@ -172,37 +184,80 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->gimbal_abs_yaw_pos = wrap_to_pi(geo->gimbal_abs_yaw_pos + geo->gimbal_abs_yaw_vel*CTRL_DELTA_T);
 
     // State-transition functions
+
+    const int is_pitch_up_maximum = 
+        (fabsf(FOLD_MODE_PITCH_MOTOR_RAD - geo->gimbal_mtr_pitch_pos) < 3.0f*DEGtoRAD);
+
+    const int is_pitch_down = 
+        (fabsf(geo->gimbal_mtr_pitch_pos) < 5.0f*DEGtoRAD);
+
+    const int is_fold_up = 
+        (fabsf(geo->gimbal_mtr_fold_pos) < 5.0f*DEGtoRAD);
+
+    b2g_B.gimbal_mode = gim_state;
     switch(gim_state){
     case GIM_IMU:
-        b2g_B.gimbal_mode = GIMBAL_IMU_MODE;
-        if(dr16.s1 == DR16_SWITCH_UP){
-            gim_state = GIM_FOLD_PREP;
+        if(dr16.s1 == DR16_SWITCH_UP){ 
+            gim_state = GIM_FOLD_PREP; // 折叠指令被触发， 准备折叠
         }
+        enable_folding_fixed_gimbal = 1;
         break;
     case GIM_FOLD_PREP:
-        b2g_B.gimbal_mode = GIMBAL_FOLD_MODE;
         if(dr16.s1 != DR16_SWITCH_UP){
-            gim_state = GIM_IMU_PREP;
+            gim_state = GIM_IMU_PREP_FOLDRISE; // 折叠指令被取消
         }
-        const float yaw_ready_err_max = 1.0f*DEGtoRAD;
+        const float yaw_ready_err_max = 2.0f*DEGtoRAD;
+        if(fabsf(gimbal_folding_position_error) < yaw_ready_err_max && is_pitch_up_maximum){
+            gim_state = GIM_FOLD; // Yaw轴对准且云台上升到位，开始折叠
+        }
         break;
-    case GIM_IMU_PREP:
-
+    case GIM_FOLD:
+        if(dr16.s1 != DR16_SWITCH_UP){
+            gim_state = GIM_IMU_PREP_FOLDRISE; // 折叠指令被取消
+        }
+        break;
+    case GIM_IMU_PREP_FOLDRISE:
+        if(is_fold_up){
+            gim_state = GIM_IMU_PREP_GIMDOWN; // 云台上升到位，切换回IMU模式
+        }
+        break;
+    case GIM_IMU_PREP_GIMDOWN:
+        if(is_pitch_down){
+            geo->target_yaw_pos = 0.0f;
+            geo->gimbal_abs_yaw_pos = 0.0f;
+            gim_state = GIM_IMU; // 云台上升到位，切换回IMU模式
+        }
+        break;
+    case GIM_STANDBY:
+        if(HAL_GetTick()-base_startup_time < 100){
+            break;
+        }
+        if(BTB_ONLINE && is_fold_up && is_pitch_down){
+            geo->target_yaw_pos = 0.0f;
+            geo->gimbal_abs_yaw_pos = 0.0f;
+            gim_state = GIM_IMU;
+        }else if(BTB_ONLINE && is_fold_up){
+            gim_state = GIM_IMU_PREP_GIMDOWN;
+        }else if(BTB_ONLINE){
+            gim_state = GIM_IMU_PREP_FOLDRISE;
+        }
         break;
     default:
         gim_state=GIM_STANDBY;
         break;
     }
 
-    if(BTB_ONLINE && gim_state == GIM_IMU){
+    if(!enable_folding_fixed_gimbal){
+        geo->T_yaw = 0.0f;
+    }else if(BTB_ONLINE && (gim_state == GIM_IMU)){
         geo->target_yaw_vel = geo->input_yaw_vel + pid_cycle(&g_gimbal_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->gimbal_abs_yaw_pos), CTRL_DELTA_T);
         // geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 5.0f);
 
         float gimbal_yaw_pid_coe = 0.2f + fabsf(cosf(geo->gimbal_mtr_pitch_pos))*(0.8f);
         geo->T_yaw = gimbal_yaw_pid_coe * pid_cycle(&g_gimbal_yaw_vel_pid, geo->target_yaw_vel - geo->gimbal_abs_yaw_vel, CTRL_DELTA_T);
-    }else if(BTB_ONLINE){
-        const float gimbal_standby_position = 68.4f*DEGtoRAD;
-        geo->target_yaw_vel = pid_cycle(&f_gimbal_yaw_pos_pid, wrap_to_pi(gimbal_standby_position - geo->gimbal_mtr_yaw_pos), CTRL_DELTA_T);
+    }else if(BTB_ONLINE && (gim_state != GIM_STANDBY)){
+
+        geo->target_yaw_vel = pid_cycle(&f_gimbal_yaw_pos_pid, gimbal_folding_position_error, CTRL_DELTA_T);
         geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 2.0f);
         geo->T_yaw = pid_cycle(&f_gimbal_yaw_vel_pid, geo->target_yaw_vel - geo->gimbal_mtr_yaw_vel, CTRL_DELTA_T);
     }else{
@@ -263,10 +318,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     b2g_B.base_roll = imu_data.roll;
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
-    vofa.val[0]=geo->vx_b;
+    vofa.val[0]=geo->gimbal_abs_yaw_pos;
     vofa.val[1]=geo->vy_b;
     vofa.val[2]=geo->gimbal_mtr_pitch_pos;
-    vofa.val[3]=geo->vyaw_wheel;
+    vofa.val[3]=geo->gimbal_mtr_fold_pos;
 
     vofa.val[4]=geo->input_yaw_vel;
     vofa.val[5]=geo->gimbal_mtr_yaw_pos;
@@ -367,25 +422,25 @@ PID_t g_pitch_pos_pid={
 // };
 
 PID_t f_pitch_pos_pid={
-    .P=1.0f,
+    .P=3.0f,
     .I=0.0f,
     .D=0.0f,
     .integral_max=0.01f
 }; 
 
-PID_t fold_vel_pid={
-    .P=0.1f,
-    .I=0.0f,
-    .D=0.0f,
-    .integral_max=0.01f
-};
+// PID_t fold_vel_pid={
+//     .P=0.1f,
+//     .I=0.0f,
+//     .D=0.0f,
+//     .integral_max=0.01f
+// };
 
-PID_t fold_pos_pid={
-    .P=0.1f,
-    .I=0.0f,
-    .D=0.0f,
-    .integral_max=0.01f
-};
+// PID_t fold_pos_pid={
+//     .P=0.1f,
+//     .I=0.0f,
+//     .D=0.0f,
+//     .integral_max=0.01f
+// };
 
 // uint8_t reset_zeropoint[8] = {0x64,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 void role_controller_init(){
@@ -401,6 +456,9 @@ void dr16_on_change(){
     }
     
 }
+
+#define FOLDING_LOCK()    do{servo_SetAngle(0.0f);}while(0)
+#define FOLDING_UNLOCK()  do{servo_SetAngle(60.0f);}while(0)
 
 /* For X4-36, need to first set VEL_P to 0.015, VEL_I to 0.00005 */
 /* Also need to increase X4-36 max acceleration */
@@ -439,6 +497,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->abs_pitch_vel = -imu_data.gyro[1]*DEGtoRAD;
     geo->abs_pitch_pos = -imu_data.pitch;
 
+    geo->mtr_fold_pos = fmotor.fold.precise_position;
+
     const float myact_motor_alpha = 0.5f;
 
     geo->mtr_pitch_pos = -fmotor.pitch.precise_position + PITCH_MOTOR_LOCKED_PITCH_MINIMUM;
@@ -460,8 +520,14 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     uint8_t gimbal_mode = b2g_B.gimbal_mode;
 
+    if((gimbal_mode == GIM_FOLD_PREP || gimbal_mode == GIM_FOLD) && BTB_ONLINE){
+        FOLDING_UNLOCK();
+    }else{
+        FOLDING_LOCK();
+    }
+
     switch (gimbal_mode){
-        case GIMBAL_IMU_MODE:
+        case GIM_IMU:
             geo->target_pitch_pos += geo->input_pitch_vel*CTRL_DELTA_T;
 
             const float MAX_PITCH_ANGLE=50.0f*DEGtoRAD;
@@ -482,18 +548,32 @@ void role_controller_step(const float CTRL_DELTA_T){
                 set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
 
             break;
-        case GIMBAL_FOLD_MODE:
 
-            const float FOLD_MODE_PITCH_MOTOR_RAD = 129.0f*DEGtoRAD;
+        case GIM_IMU_PREP_GIMDOWN:
+            geo->target_pitch_pos = geo->abs_pitch_pos;
+
+            geo->target_pitch_vel = pid_cycle(&f_pitch_pos_pid, 
+                2.0f*DEGtoRAD - geo->mtr_pitch_pos, CTRL_DELTA_T);
+            
+            limit_val(geo->target_pitch_vel, 1.5f);
+            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
+                set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
+            break;
+        case GIM_FOLD:
+        case GIM_IMU_PREP_FOLDRISE:
+        case GIM_FOLD_PREP:
+
             geo->target_pitch_vel = pid_cycle(&f_pitch_pos_pid, 
                 FOLD_MODE_PITCH_MOTOR_RAD - geo->mtr_pitch_pos, CTRL_DELTA_T);
             
-            limit_val(geo->target_pitch_vel, 1.0f);
+            limit_val(geo->target_pitch_vel, 1.5f);
             fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
                 set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
             break;
         
         default:
+            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
+                set_speed_MyAct(motors.pitch.tranmitbuf, 0.0f, 0), 8);
             break;
     }
 
@@ -527,19 +607,28 @@ void role_controller_step(const float CTRL_DELTA_T){
         Tfeeder_1*(1/M2006_TORQUE_CONSTANT)
     ), 8);
 
-    if(!BTB_ONLINE){
-        geo->T_pitch = 0.0f;
-    }else{
+    if(BTB_ONLINE){
         g2b_A.gimbal_yaw_vel_imu = geo->yaw_vel_imu;
         g2b_A.gimbal_pitch = (int16_t)(wrap_to_pi(geo->mtr_pitch_pos)*1E4f);
+        g2b_A.gimbal_fold = (int16_t)(wrap_to_pi(geo->mtr_fold_pos)*1E4f);
         fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
     }
+    
 
     // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
     //     set_torque_X4_36(motors.pitch.tranmitbuf, -geo->T_pitch), 8);
-    
-    fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x6, 
-        set_torque_X4_36(motors.fold.tranmitbuf, 0.0f), 8);
+
+    const float FOLDING_MAX_SPEED_DPS = 60.0f;
+    const float NORMAL_POSITION_DEG = 0.0f;
+    const float DOWN_POSITION_DEG = -129.5f; //(19.5+110)
+    // const float DOWN_POSITION_DEG = -90.0f;
+    if(gimbal_mode == GIM_FOLD){
+        fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x6, 
+            set_position_MyAct(motors.fold.tranmitbuf, DOWN_POSITION_DEG, FOLDING_MAX_SPEED_DPS), 8);
+    }else{
+        fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x6, 
+            set_position_MyAct(motors.fold.tranmitbuf, NORMAL_POSITION_DEG, FOLDING_MAX_SPEED_DPS), 8);
+    }
 
     fdcanx_send_data(&hfdcan3, MYACT_CTRLID_ALL, 
         acquire_motor_angle_MyAct(motors.pitch.tranmitbuf), 8);
@@ -547,7 +636,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[0]=-fmotor.flywheel_1.speed;
     vofa.val[1]=gravity_feedforward;
 
-    vofa.val[2]=geo->abs_pitch_pos;
+    vofa.val[2]=geo->mtr_fold_pos;
     vofa.val[3]=geo->mtr_pitch_pos;
 
     vofa.val[4]=geo->abs_pitch_vel;

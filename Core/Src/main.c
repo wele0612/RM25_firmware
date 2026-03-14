@@ -116,6 +116,7 @@ int main(void)
   MX_TIM7_Init();
   MX_TIM1_Init();
   MX_TIM6_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   robot_init();
   /* USER CODE END 2 */

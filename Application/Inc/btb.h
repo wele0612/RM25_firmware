@@ -14,7 +14,7 @@
 typedef struct __attribute__((packed)) {
     float gimbal_yaw_vel_imu;
     int16_t gimbal_pitch; // 1e-4 RAD/LSB
-    int16_t fold_pitch; // 1e-4 RAD/LSB
+    int16_t gimbal_fold; // 1e-4 RAD/LSB
 }g2b_A_t;
 __BTB_VAR g2b_A_t g2b_A;
 #define G2B_MSG_A_ID 0x10

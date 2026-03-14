@@ -4,6 +4,7 @@
 #include <h7can.h>
 #include <icm42688.h>
 #include <receiver.h>
+#include <servo_pwm.h>
 
 #include <robot_arch.h>
 
@@ -94,8 +95,8 @@ void robot_init(){
     buzzer_DJI_startup();
 
     timeout.last_remote_tick=HAL_GetTick();
-    
     controller_init();
+    
     HAL_TIM_Base_Start_IT(&htim7);
 
     //vofa message buffer is in NOLOAD section. Manually initialize after power up.
@@ -107,6 +108,7 @@ void robot_init(){
 
     referee_ui_update(0);
 
+    servo_init();
 }
 /** @warning This functions is block, DO NOT call this function in ISR
  * 此函数会阻塞，不要在中断中调用此函数。

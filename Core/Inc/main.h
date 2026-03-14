@@ -73,6 +73,8 @@ void Error_Handler(void);
 #define LED_PC13_GPIO_Port GPIOC
 #define IMU_CS_Pin GPIO_PIN_0
 #define IMU_CS_GPIO_Port GPIOC
+#define SERVO_PWM1_Pin GPIO_PIN_14
+#define SERVO_PWM1_GPIO_Port GPIOE
 #define USER_KEY_Pin GPIO_PIN_15
 #define USER_KEY_GPIO_Port GPIOA
 

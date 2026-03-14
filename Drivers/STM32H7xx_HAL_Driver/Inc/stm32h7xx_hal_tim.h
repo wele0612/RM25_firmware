@@ -2374,10 +2374,12 @@ uint32_t HAL_TIM_ReadCapturedValue(const TIM_HandleTypeDef *htim, uint32_t Chann
   * @}
   */
 
+
+
 /** @defgroup TIM_Exported_Functions_Group9 TIM Callbacks functions
-  *  @brief   TIM Callbacks functions
-  * @{
-  */
+ *  @brief   TIM Callbacks functions
+ * @{
+ */
 /* Callback in non blocking modes (Interrupt and DMA) *************************/
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 void HAL_TIM_PeriodElapsedHalfCpltCallback(TIM_HandleTypeDef *htim);
