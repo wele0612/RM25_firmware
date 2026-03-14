@@ -283,7 +283,10 @@
             
             float target_vx;
             float target_vy;
-            float target_vyaw;
+            float target_vyaw; // Base
+
+            float target_vx_b;
+            float target_vy_b;
 
             float target_yaw_vel; // Gimbal Yaw vel
             float target_yaw_pos; // Gimbal Yaw pos

@@ -50,21 +50,21 @@ void dr16_on_change(){
 }
 
 PID_t body_x_vel_pid={
-    .P = 5.0f,
+    .P = 12.0f,
     .I = 0.0f,
     .D = 0.0f,
     .integral_max = 0.1f
 };
 
 PID_t body_y_vel_pid={
-    .P = 5.0f,
+    .P = 12.0f,
     .I = 0.0f,
     .D = 0.0f,
     .integral_max = 0.1f
 };
 
 PID_t body_yaw_vel_pid={
-    .P = 5.0f,
+    .P = 35.0f,
     .I = 0.0f,
     .D = 0.0f,
     .integral_max = 0.1f
@@ -135,9 +135,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    geo->target_vx = dr16.channel[0]*0.6f;
-    geo->target_vy = dr16.channel[1]*0.6f;
-    // geo->target_vyaw = dr16.channel[2]*1.5f;
+    geo->target_vx = dr16.channel[0]*6.0f;
+    geo->target_vy = dr16.channel[1]*6.0f;
+    geo->target_vyaw = -dr16.channel[2]*8.0f;
 
     // geo->input_yaw_vel = dr16.channel[2]*1.0f;
     // geo->input_pitch_vel = dr16.channel[3]*1.0f;
@@ -159,6 +159,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     //     // geo->target_yaw_vel = 0.0f;
     //     geo->target_yaw_pos = 0.0f;
     // }
+
+    
 
     geo->target_yaw_pos = wrap_to_pi(geo->target_yaw_pos + geo->input_yaw_vel*CTRL_DELTA_T);
 
@@ -278,14 +280,29 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->vyaw_gyro = -imu_data.gyro[2]*DEGtoRAD;
     
     /* Forward kinetics of the base */
-    float vx_b = -(vel_LF + vel_RF - vel_LB - vel_RB)*(0.7071068f/4.0f);
-    float vy_b = -(vel_LF - vel_RF + vel_LB - vel_RB)*(0.7071068f/4.0f);
+    float vx_b = -(vel_LF + vel_RF - vel_LB - vel_RB)*(1.4142136f/4.0f);
+    float vy_b = -(vel_LF - vel_RF + vel_LB - vel_RB)*(1.4142136f/4.0f);
     float vyaw_wheel = (vel_LF + vel_LB + vel_RF + vel_RB)*(0.25f/BODY_RADIUS);
 
     const float wheel_v_alpha = 0.2f;
     geo->vx_b = vx_b*wheel_v_alpha + geo->vx_b*(1.0f-wheel_v_alpha);
     geo->vy_b = vy_b*wheel_v_alpha + geo->vy_b*(1.0f-wheel_v_alpha);
     geo->vyaw_wheel = vyaw_wheel*wheel_v_alpha + geo->vyaw_wheel*(1.0f-wheel_v_alpha);
+
+    geo->vx = geo->vx_b;
+    geo->vy = geo->vy_b;
+
+    geo->F_x = pid_cycle(&body_x_vel_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
+    geo->F_y = pid_cycle(&body_y_vel_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
+    geo->T_base_yaw = pid_cycle(&body_yaw_vel_pid, geo->target_vyaw - geo->vyaw_wheel, CTRL_DELTA_T);
+    
+    geo->F_x = limit_val(geo->F_x, 12.0f);
+    geo->F_y = limit_val(geo->F_y, 12.0f);
+    geo->T_base_yaw = limit_val(geo->T_base_yaw, 20.0f);
+    
+    // geo->F_x = geo->target_vx;
+    // geo->F_y = geo->target_vy;
+    // geo->T_base_yaw = geo->target_vyaw*2.0f;
 
     // geo->T_base_yaw = pid_cycle()
     geo->F_x_b = geo->F_x;
@@ -294,10 +311,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     float F_single_wheel_turn = -geo->T_base_yaw*(0.25f/BODY_RADIUS);
     float T_single_wheel_turn = F_single_wheel_turn*WHEEL_RADIUS;
     float force_vector_coe = 1.4142136f*0.25f;
-    geo->T_LF =  -(geo->F_y_b + geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
-    geo->T_LB =  -(geo->F_y_b - geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
-    geo->T_RF = -(-geo->F_y_b + geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
-    geo->T_RB = -(-geo->F_y_b - geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
+    geo->T_LF =  (geo->F_y_b + geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
+    geo->T_LB =  (geo->F_y_b - geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
+    geo->T_RF = (-geo->F_y_b + geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
+    geo->T_RB = (-geo->F_y_b - geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
 
     uint8_t tx_buf[8];
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buf,
@@ -318,14 +335,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     b2g_B.base_roll = imu_data.roll;
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
-    vofa.val[0]=geo->gimbal_abs_yaw_pos;
-    vofa.val[1]=geo->vy_b;
-    vofa.val[2]=geo->gimbal_mtr_pitch_pos;
-    vofa.val[3]=geo->gimbal_mtr_fold_pos;
+    vofa.val[0]=geo->F_x;
+    vofa.val[1]=geo->F_y;
+    vofa.val[2]=geo->T_base_yaw;
 
-    vofa.val[4]=geo->input_yaw_vel;
-    vofa.val[5]=geo->gimbal_mtr_yaw_pos;
-    vofa.val[6]=gim_state;
+    vofa.val[3]=geo->vx;
+    vofa.val[4]=geo->vy;
+    vofa.val[5]=geo->target_vx;
+    vofa.val[6]=geo->target_vy;
 
     // vofa.val[7]=geo->target_agi_pos;
     // vofa.val[8]=geo->agi_vel;
