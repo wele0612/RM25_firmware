@@ -211,7 +211,7 @@ uint8_t *acquire_motor_angle_MyAct(uint8_t *msg);
 typedef struct report_MyAct_Joint_t{
 	float speed;
 	float position;
-	float precise_position; // Acquired by 0x92 CMD
+	float precise_position; // Acquired by 0x92 CMD. In RAD
 	float current_actual;
 	int8_t tempreture;
 

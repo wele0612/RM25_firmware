@@ -520,12 +520,6 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     uint8_t gimbal_mode = b2g_B.gimbal_mode;
 
-    if((gimbal_mode == GIM_FOLD_PREP || gimbal_mode == GIM_FOLD) && BTB_ONLINE){
-        FOLDING_UNLOCK();
-    }else{
-        FOLDING_LOCK();
-    }
-
     switch (gimbal_mode){
         case GIM_IMU:
             geo->target_pitch_pos += geo->input_pitch_vel*CTRL_DELTA_T;
@@ -628,6 +622,15 @@ void role_controller_step(const float CTRL_DELTA_T){
     }else{
         fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x6, 
             set_position_MyAct(motors.fold.tranmitbuf, NORMAL_POSITION_DEG, FOLDING_MAX_SPEED_DPS), 8);
+    }
+
+    const float is_fold_down = (fabsf(fmotor.fold.precise_position*RADtoDEG - DOWN_POSITION_DEG) < 10.0f);
+
+    if((gimbal_mode == GIM_FOLD_PREP || (gimbal_mode == GIM_FOLD && !is_fold_down)) 
+        && BTB_ONLINE){
+        FOLDING_UNLOCK();
+    }else{
+        FOLDING_LOCK();
     }
 
     fdcanx_send_data(&hfdcan3, MYACT_CTRLID_ALL, 
