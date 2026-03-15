@@ -207,6 +207,7 @@
             float target_speed_y;
             float target_omega_yaw;
             float vehicle_angle;
+            float target_yaw_pos;
         }robot_ctrl_t;
     #endif
 #endif

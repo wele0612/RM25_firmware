@@ -57,4 +57,7 @@ typedef enum IMU_state{
 }IMU_state_t;
 __GLOBAL_VAR IMU_state_t imu_state;
 
+// IMU HUMAN FIX
+__GLOBAL_VAR float human_yaw_fix;
+
 #endif 
