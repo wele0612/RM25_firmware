@@ -22,12 +22,30 @@ enum {
     GIM_SNIPER = 6, // 吊射模式
 }gim_state;
 
+enum {
+    LAUNCH_INIT = 0, // 初始模式
+    LAUNCH_IMU = 1, // 近战模式，积累位置环
+    LAUNCH_SNP_FEEDTURN = 2, // 吊射模式阶段一，预置转
+    LAUNCH_SNP_AGITURN = 3, // 吊射模式阶段二，拨弹转
+}launch_state;
+
 const float FOLD_MODE_PITCH_MOTOR_RAD = 129.0f*DEGtoRAD;
 
 #ifdef CONFIG_PLATFORM_BASE
 
-const float AGI_INIT_SETPOINT = 2.266f;
+const float AGI_PER_POS_INCRE = 2*PI/6.0f;
 uint32_t base_startup_time = 0;
+
+// 求最近的拨盘起始位置
+static inline float get_nearest_agi_reset_pos(float current_pos){
+    const float INVERSE_THRE = 0.3f;
+    float pos = wrap_to_pi(floorf(current_pos * (1.0f/AGI_PER_POS_INCRE))*AGI_PER_POS_INCRE);
+    float pos_diff = wrap_to_pi(current_pos - pos);
+    if(pos_diff > INVERSE_THRE){
+        pos += AGI_PER_POS_INCRE;
+    }
+    return pos;
+}
 
 static void inline init_agi_damiao(){
     fdcanx_send_data(&hfdcan3, AGI_CTRLID, enable_DM_Joint(motors.agi.tranmitbuf), 8);
@@ -135,16 +153,24 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    geo->target_vx = dr16.channel[0]*6.0f;
-    geo->target_vy = dr16.channel[1]*6.0f;
+    geo->target_vx = dr16.channel[0]*5.0f;
+    geo->target_vy = dr16.channel[1]*5.0f;
     geo->target_vyaw = -dr16.channel[2]*8.0f;
 
     // geo->input_yaw_vel = dr16.channel[2]*1.0f;
     // geo->input_pitch_vel = dr16.channel[3]*1.0f;
     const float input_mouse_alpha = 0.02f;
-    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*0.02f*input_mouse_alpha;
-    geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*0.02f*input_mouse_alpha;
 
+    float control_sensitivity;
+    if(gim_state == GIM_SNIPER){
+        control_sensitivity = 0.005f;
+    }else{
+        control_sensitivity = 0.02f;
+    }
+    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*control_sensitivity*input_mouse_alpha;
+    geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*control_sensitivity*input_mouse_alpha;
+
+    
     b2g_B.flywheel_enabled = (dr16.s2 == DR16_SWITCH_UP);
 
     // geo->target_yaw_vel = dr16.channel[3]*1.5f;
@@ -160,11 +186,48 @@ void role_controller_step(const float CTRL_DELTA_T){
     //     geo->target_yaw_pos = 0.0f;
     // }
 
-    
-
     geo->target_yaw_pos = wrap_to_pi(geo->target_yaw_pos + geo->input_yaw_vel*CTRL_DELTA_T);
 
     /* Agitator control */
+
+    const int feeder_in_pos = g2b_B.feeder_in_place;
+
+    switch (launch_state){
+    case LAUNCH_INIT:
+        geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
+        if(gim_state == GIM_IMU && BTB_ONLINE){
+            launch_state = LAUNCH_IMU;
+        }else if(dr16.mouse.press_l && BTB_ONLINE){
+            launch_state = LAUNCH_SNP_FEEDTURN;
+        }
+        break;
+    case LAUNCH_IMU:
+        if(gim_state == GIM_SNIPER){
+            launch_state = LAUNCH_INIT;
+        }
+        break;
+    case LAUNCH_SNP_FEEDTURN:
+        if(!BTB_ONLINE){
+            launch_state = LAUNCH_INIT;
+        }else if(feeder_in_pos){ // 主动预置到位，拨盘开始转
+            geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos + AGI_PER_POS_INCRE);
+            launch_state = LAUNCH_SNP_AGITURN;
+        }
+        break;
+    case LAUNCH_SNP_AGITURN:
+        if(fabs(wrap_to_pi(geo->target_agi_pos - geo->agi_pos)) < 5.0f*DEGtoRAD){
+            launch_state = LAUNCH_INIT; // 拨盘转到位了，发射时序结束。
+        }
+        break;
+    default:
+        break;
+    }
+
+    if(launch_state == LAUNCH_IMU || launch_state == LAUNCH_SNP_FEEDTURN){
+        b2g_B.feeder_push = 1;
+    }else{
+        b2g_B.feeder_push = 0;
+    }
 
     geo->agi_pos = fmotor.agi.position;
     geo->target_agi_vel = pid_cycle(&agi_pos_pid, wrap_to_pi(geo->target_agi_pos - geo->agi_pos), CTRL_DELTA_T);
@@ -201,6 +264,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     case GIM_IMU:
         if(dr16.s1 == DR16_SWITCH_UP){ 
             gim_state = GIM_FOLD_PREP; // 折叠指令被触发， 准备折叠
+        }else if(dr16.s1 == DR16_SWITCH_DOWN){
+            geo->target_yaw_pos = 0.0f;
+            geo->gimbal_abs_yaw_pos = 0.0f;
+            gim_state = GIM_SNIPER;    // 进吊射模式
         }
         enable_folding_fixed_gimbal = 1;
         break;
@@ -230,6 +297,11 @@ void role_controller_step(const float CTRL_DELTA_T){
             gim_state = GIM_IMU; // 云台上升到位，切换回IMU模式
         }
         break;
+    case GIM_SNIPER:
+        if(dr16.s1 != DR16_SWITCH_DOWN){ // 退出吊射模式
+            gim_state = GIM_IMU_PREP_GIMDOWN;
+        }
+        break;
     case GIM_STANDBY:
         if(HAL_GetTick()-base_startup_time < 100){
             break;
@@ -251,7 +323,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(!enable_folding_fixed_gimbal){
         geo->T_yaw = 0.0f;
-    }else if(BTB_ONLINE && (gim_state == GIM_IMU)){
+    }else if(BTB_ONLINE && (gim_state == GIM_IMU || gim_state == GIM_SNIPER)){
         geo->target_yaw_vel = geo->input_yaw_vel + pid_cycle(&g_gimbal_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->gimbal_abs_yaw_pos), CTRL_DELTA_T);
         // geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 5.0f);
 
@@ -289,8 +361,19 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->vy_b = vy_b*wheel_v_alpha + geo->vy_b*(1.0f-wheel_v_alpha);
     geo->vyaw_wheel = vyaw_wheel*wheel_v_alpha + geo->vyaw_wheel*(1.0f-wheel_v_alpha);
 
-    geo->vx = geo->vx_b;
-    geo->vy = geo->vy_b;
+    float body_yaw_offset;
+    if(gim_state == GIM_IMU || gim_state == GIM_STANDBY){
+        body_yaw_offset = -geo->gimbal_mtr_yaw_pos;
+    }else{
+        body_yaw_offset = 0.0f;
+    }
+
+    const float cosby = cosf(body_yaw_offset);
+    const float sinby = sinf(body_yaw_offset);
+
+    // Convert body coordinate system to gimbal coordinate system.
+    geo->vx = geo->vx_b * cosby + geo->vy_b * -sinby;
+    geo->vy = geo->vx_b * sinby + geo->vy_b * cosby;
 
     geo->F_x = pid_cycle(&body_x_vel_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
     geo->F_y = pid_cycle(&body_y_vel_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
@@ -300,13 +383,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->F_y = limit_val(geo->F_y, 12.0f);
     geo->T_base_yaw = limit_val(geo->T_base_yaw, 20.0f);
     
-    // geo->F_x = geo->target_vx;
-    // geo->F_y = geo->target_vy;
-    // geo->T_base_yaw = geo->target_vyaw*2.0f;
+    // geo->F_x = geo->target_vx*0.2f;
+    // geo->F_y = geo->target_vy*0.2f;
+    // geo->T_base_yaw = geo->target_vyaw*0.5f;
 
-    // geo->T_base_yaw = pid_cycle()
-    geo->F_x_b = geo->F_x;
-    geo->F_y_b = geo->F_y;
+    geo->F_x_b = geo->F_x * cosby + geo->F_y * sinby;
+    geo->F_y_b = geo->F_x * -sinby + geo->F_y * cosby;
 
     float F_single_wheel_turn = -geo->T_base_yaw*(0.25f/BODY_RADIUS);
     float T_single_wheel_turn = F_single_wheel_turn*WHEEL_RADIUS;
@@ -317,18 +399,18 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->T_RB = (-geo->F_y_b - geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
 
     uint8_t tx_buf[8];
-    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buf,
-        geo->T_LF*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
-        geo->T_LB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
-        geo->T_RF*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
-        geo->T_RB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB)), 8);
+    // fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buf,
+    //     geo->T_LF*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
+    //     geo->T_LB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
+    //     geo->T_RF*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
+    //     geo->T_RB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB)), 8);
 
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, set_torque_DM4310(motors.yaw.tranmitbuf, geo->T_yaw), 8);
 
-    geo->T_agi=0.0f;
+    // geo->T_agi=0.0f;
     fdcanx_send_data(&hfdcan3, AGI_CTRLID, set_torque_DM4310(motors.agi.tranmitbuf, geo->T_agi), 8);
 
-    fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
+    // fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
 
     geo->input_pitch_vel = limit_val(geo->input_pitch_vel, 6.0f);
     b2g_B.target_pitch_vel = (int16_t)(geo->input_pitch_vel*(1/3E-4f));
@@ -341,14 +423,14 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     vofa.val[3]=geo->vx;
     vofa.val[4]=geo->vy;
-    vofa.val[5]=geo->target_vx;
-    vofa.val[6]=geo->target_vy;
+    vofa.val[5]=gim_state;
+    vofa.val[6]=launch_state;
 
     // vofa.val[7]=geo->target_agi_pos;
     // vofa.val[8]=geo->agi_vel;
     // vofa.val[9]=fmotor.agi.position;
 
-    vofa.val[7]=geo->target_yaw_vel;
+    vofa.val[7]=g2b_B.feeder_in_place;
     vofa.val[8]=geo->target_yaw_pos;
     vofa.val[9]=geo->gimbal_mtr_yaw_vel;
 }
@@ -376,6 +458,10 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         break;
     case G2B_MSG_A_ID:
         memcpy(&g2b_A, msg, 8);
+        BTB_UPDATE_CNTDOWN();
+        break;
+    case G2B_MSG_B_ID:
+        memcpy(&g2b_B, msg, 8);
         BTB_UPDATE_CNTDOWN();
         break;
     default:
@@ -465,12 +551,12 @@ void role_controller_init(){
 }
 
 void dr16_on_change(){
-    robot_ctrl_t *geo = &robot_geo;
+    // robot_ctrl_t *geo = &robot_geo;
 
-    if(dr16.s2 == DR16_SWITCH_MID && dr16.previous.s2 == DR16_SWITCH_DOWN){
-        geo->feeder_position = 0.0f;
-        geo->target_feeder_position = 1.7f;
-    }
+    // if(dr16.s2 == DR16_SWITCH_MID && dr16.previous.s2 == DR16_SWITCH_DOWN){
+    //     geo->feeder_position = 0.0f;
+    //     geo->target_feeder_position = 1.7f;
+    // }
     
 }
 
@@ -496,7 +582,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         if(b2g_B.flywheel_enabled){
             geo->target_flywheel_rpm = 4075.0f;
         }else{
-            geo->target_flywheel_rpm = 200.0f;
+            geo->target_flywheel_rpm = 1000.0f;
         }
     }else{
         geo->target_flywheel_rpm = 60.0f;
@@ -603,11 +689,19 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->feeder_vel = geo->feeder_vel * (1.0f-feeder_vel_alpha) + feeder_vel*feeder_vel_alpha;
     float Tfeeder_1 = pid_cycle(&feeder_1_vel_pid, geo->target_feeder_vel - geo->feeder_vel, CTRL_DELTA_T);
 
-    geo->feeder_position += feeder_vel * CTRL_DELTA_T;
-
-    if(geo->feeder_position > geo->target_feeder_position){
-        Tfeeder_1 = limit_val(Tfeeder_1, 0.115f);
+    const int feeder_push = b2g_B.feeder_push;
+    if(!feeder_push){
+        geo->feeder_position = 0.0f;
+        Tfeeder_1 = limit_val(Tfeeder_1, 0.09f);
+    }else{
+        geo->feeder_position += feeder_vel * CTRL_DELTA_T;
     }
+
+    // geo->feeder_position += feeder_vel * CTRL_DELTA_T;
+
+    // if(geo->feeder_position > geo->target_feeder_position){
+    //     Tfeeder_1 = limit_val(Tfeeder_1, 0.115f);
+    // }
 
     uint8_t tx_buffer[8];
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(
@@ -623,14 +717,17 @@ void role_controller_step(const float CTRL_DELTA_T){
         g2b_A.gimbal_pitch = (int16_t)(wrap_to_pi(geo->mtr_pitch_pos)*1E4f);
         g2b_A.gimbal_fold = (int16_t)(wrap_to_pi(geo->mtr_fold_pos)*1E4f);
         fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
+
+        const float FEEDER_POSITION_PER_SHOT = 1.0f;
+        g2b_B.feeder_in_place = (geo->feeder_position > FEEDER_POSITION_PER_SHOT);
+        fdcanx_send_data(&hfdcan1, G2B_MSG_B_ID, (uint8_t *)&g2b_B, 8);
     }
-    
 
     // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
     //     set_torque_X4_36(motors.pitch.tranmitbuf, -geo->T_pitch), 8);
 
     const float FOLDING_MAX_SPEED_DPS = 60.0f;
-    const float NORMAL_POSITION_DEG = 0.0f;
+    const float NORMAL_POSITION_DEG = 0.5f;
     const float DOWN_POSITION_DEG = -129.5f; //(19.5+110)
     // const float DOWN_POSITION_DEG = -90.0f;
     if(gimbal_mode == GIM_FOLD){
@@ -654,7 +751,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         acquire_motor_angle_MyAct(motors.pitch.tranmitbuf), 8);
 
     vofa.val[0]=-fmotor.flywheel_1.speed;
-    vofa.val[1]=gravity_feedforward;
+    vofa.val[1]=(float)BTB_ONLINE;
 
     vofa.val[2]=geo->mtr_fold_pos;
     vofa.val[3]=geo->mtr_pitch_pos;
@@ -690,10 +787,10 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case MYACT_RPTID+0x6:
         parse_feedback_X4_36(msg, &motors.fold);
         break;
-    case B2G_MSG_A_ID:
-        memcpy(&b2g_A, msg, 8);
-        BTB_UPDATE_CNTDOWN();
-        break;
+    // case B2G_MSG_A_ID:
+    //     memcpy(&b2g_A, msg, 8);
+    //     BTB_UPDATE_CNTDOWN();
+    //     break;
     case B2G_MSG_B_ID:
         memcpy(&b2g_B, msg, 8);
         BTB_UPDATE_CNTDOWN();
