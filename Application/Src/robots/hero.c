@@ -229,7 +229,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         b2g_B.feeder_push = 0;
     }
 
-    geo->agi_pos = fmotor.agi.position;
+    geo->agi_pos = wrap_to_pi(fmotor.agi.position);
     geo->target_agi_vel = pid_cycle(&agi_pos_pid, wrap_to_pi(geo->target_agi_pos - geo->agi_pos), CTRL_DELTA_T);
     geo->target_agi_vel = limit_val(geo->target_agi_vel, 10.0f);
     geo->agi_vel = fmotor.agi.speed * 0.25f;
@@ -423,16 +423,16 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     vofa.val[3]=geo->vx;
     vofa.val[4]=geo->vy;
-    vofa.val[5]=gim_state;
+    vofa.val[5]=fmotor.agi.torque_actual;
     vofa.val[6]=launch_state;
 
     // vofa.val[7]=geo->target_agi_pos;
     // vofa.val[8]=geo->agi_vel;
     // vofa.val[9]=fmotor.agi.position;
 
-    vofa.val[7]=g2b_B.feeder_in_place;
-    vofa.val[8]=geo->target_yaw_pos;
-    vofa.val[9]=geo->gimbal_mtr_yaw_vel;
+    vofa.val[7]=geo->agi_pos;
+    vofa.val[8]=geo->agi_vel;
+    vofa.val[9]=fmotor.yaw.torque_actual;
 }
 
 
