@@ -72,8 +72,8 @@ static inline void forward_kinetics_jacobian(
 PID_t body_roll_pid={
     .P=0.2f,
     .D=0.0f,
-    .I=0.7f,
-    .integral_max=0.1f
+    .I=0.5f,
+    .integral_max=0.05f
 };
 
 PID_t wheel_l_vel_calib_pit={
@@ -141,7 +141,7 @@ PID_t agi_vel_pid={
 };
 
 static const float agi_gear_ratio = 4.0f;
-static const float robot_weight = 12.0f; // kg
+static const float robot_weight = 17.0f; // body weight, in kg.
 
 enum {
     WBR_STANDBY=0, // All joints disabled. Default after power-up
@@ -168,14 +168,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    // if(dr16.s1 == DR16_SWITCH_UP){
-    //     wbr_state=WBR_CONST_VEL;
-    // }else if(dr16.s1 == DR16_SWITCH_MID){
-    //     wbr_state=WBR_LQR_PREP;
-    // }else if(dr16.s1 == DR16_SWITCH_DOWN){
-    //     wbr_state=WBR_LQR;
-    // }
-    wbr_state = WBR_STANDBY;
+    if(dr16.s1 == DR16_SWITCH_UP){
+        wbr_state=WBR_CONST_VEL;
+    }else if(dr16.s1 == DR16_SWITCH_MID){
+        wbr_state=WBR_LQR_PREP;
+    }else if(dr16.s1 == DR16_SWITCH_DOWN){
+        wbr_state=WBR_LQR;
+    }
+    // wbr_state = WBR_STANDBY;
 
     // ----------------- Gimbal / Feeder control -----------------
     
@@ -314,7 +314,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     }else if(wbr_state == WBR_LQR){
 
-        geo->target_ds = dr16.channel[3]*1.1f;
+        geo->target_ds = dr16.channel[3]*3.0f;
         geo->target_dphi = -dr16.channel[2]*6.0f;
 
         geo->target_b_height = 0.22f;
@@ -346,11 +346,17 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->Twl = pid_cycle(&wheel_l_vel_calib_pit, - fmotor.wheel_L.speed, CTRL_DELTA_T);
         geo->Twr = pid_cycle(&wheel_r_vel_calib_pit, - fmotor.wheel_R.speed, CTRL_DELTA_T);
     }else if(wbr_state == WBR_LQR){
+        // const float K_mat[4][10] = {
+        //     {-0.44363f, -2.96722f, -0.71238f, -1.60458f, -7.84784f, -0.87851f, -6.27585f, -0.70180f, -6.23402f, -1.13915f},
+        //     {-0.44363f, -2.96722f, 0.71238f, 1.60458f, -6.27585f, -0.70180f, -7.84784f, -0.87851f, -6.23402f, -1.13915f},
+        //     {1.43105f, 9.46129f, -1.54522f, -3.53900f, 23.39001f, 2.63915f, 0.14020f, 1.00558f, -44.36114f, -4.24812f},
+        //     {1.43105f, 9.46129f, 1.54522f, 3.53900f, 0.14020f, 1.00558f, 23.39001f, 2.63915f, -44.36114f, -4.24812f}
+        // };
         const float K_mat[4][10] = {
-            {-0.44363f, -2.96722f, -0.71238f, -1.60458f, -7.84784f, -0.87851f, -6.27585f, -0.70180f, -6.23402f, -1.13915f},
-            {-0.44363f, -2.96722f, 0.71238f, 1.60458f, -6.27585f, -0.70180f, -7.84784f, -0.87851f, -6.23402f, -1.13915f},
-            {1.43105f, 9.46129f, -1.54522f, -3.53900f, 23.39001f, 2.63915f, 0.14020f, 1.00558f, -44.36114f, -4.24812f},
-            {1.43105f, 9.46129f, 1.54522f, 3.53900f, 0.14020f, 1.00558f, 23.39001f, 2.63915f, -44.36114f, -4.24812f}
+            {-0.44302f, -2.98323f, -0.57788f, -1.30333f, -8.41723f, -0.90468f, -5.08629f, -0.65031f, -9.63352f, -1.53654f},
+            {-0.44302f, -2.98323f, 0.57788f, 1.30333f, -5.08629f, -0.65031f, -8.41723f, -0.90468f, -9.63352f, -1.53654f},
+            {1.43390f, 9.57541f, -2.23402f, -5.16823f, 28.60222f, 2.83014f, -2.52826f, 1.09292f, -41.70368f, -4.30190f},
+            {1.43390f, 9.57541f, 2.23402f, 5.16823f, -2.52826f, 1.09292f, 28.60222f, 2.83014f, -41.70368f, -4.30190f}
         };
 
         geo->lqr_err[0]= 0.0f - geo->s;
@@ -382,18 +388,19 @@ void role_controller_step(const float CTRL_DELTA_T){
             geo->Tblr += K_mat[3][i]*geo->lqr_err[i];
         }
 
-        // geo->L_diff = pid_cycle(&body_roll_pid, geo->target_roll - geo->roll, CTRL_DELTA_T);
+        geo->L_diff = pid_cycle(&body_roll_pid, geo->target_roll - geo->roll, CTRL_DELTA_T);
         geo->L_diff = limit_val(geo->L_diff, 0.05f);
         geo->target_L_length = geo->target_b_height + geo->L_diff;
         geo->target_R_length = geo->target_b_height - geo->L_diff;
         
+        const float gravity_feedforward_support = robot_weight*9.81f/2.0f;
         if(HAL_GetTick()%2==0){ // Left side
             geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
             // geo->Fnl -= 50.0f; // There's a spring on left side.
-            geo->Fnl += 50.0f;
+            geo->Fnl += gravity_feedforward_support;
         }else{ // Right side
             geo->Fnr = pid_cycle(&rightleg_length_pid, geo->target_R_length - geo->L_r, CTRL_DELTA_T*2);
-            geo->Fnr += 50.0f;
+            geo->Fnr += gravity_feedforward_support;
         }
 
     }else if(wbr_state == WBR_STANDBY){
@@ -446,9 +453,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
 
     // Implement board-to-board communication
-    b2g_A.base_pitch = imu_data.pitch;
-    b2g_A.base_yaw = geo->yaw_f;    
-    fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
+    // b2g_A.base_pitch = imu_data.pitch;
+    // b2g_A.base_yaw = geo->yaw_f;    
+    // fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
     
     geo->input_pitch_vel = limit_val(geo->input_pitch_vel, 6.0f);
     b2g_B.target_pitch_vel = (int16_t)(geo->input_pitch_vel*(1/3E-4f));
@@ -693,7 +700,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[6]=imu_data.pitch;
     vofa.val[7]=imu_data.roll;
     vofa.val[8]=robot_geo.target_position_pitch;
-    vofa.val[9]=b2g_A.base_pitch;
+    vofa.val[9]=(float)BTB_ONLINE;
 }
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){
@@ -707,10 +714,10 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         case 0x06:
             parse_feedback_DM4310(msg, &motors.motor_pitch, 0x0D);
             break;
-        case B2G_MSG_A_ID:
-            memcpy(&b2g_A, msg, 8);
-            BTB_UPDATE_CNTDOWN();
-            break;
+        // case B2G_MSG_A_ID:
+        //     memcpy(&b2g_A, msg, 8);
+        //     BTB_UPDATE_CNTDOWN();
+        //     break;
         case B2G_MSG_B_ID:
             memcpy(&b2g_B, msg, 8);
             BTB_UPDATE_CNTDOWN();
