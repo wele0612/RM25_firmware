@@ -7,9 +7,9 @@
 
 
 //========= Choose Robot ===========
-// #define CONFIG_ROBOT_INFANTRY_BALANCE
+#define CONFIG_ROBOT_INFANTRY_BALANCE
 //#define CONFIG_ROBOT_INFANTRY_OMNI
-#define CONFIG_ROBOT_HERO
+// #define CONFIG_ROBOT_HERO
 // #define CONFIG_ROBOT_AIMING_BENCH
 
 

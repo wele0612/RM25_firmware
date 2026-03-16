@@ -6,6 +6,8 @@
 #include<utils.h>
 #include<global_variables.h>
 
+#include<vision.h>
+
 #include<h7can.h>
 #include<btb.h>
 
@@ -175,6 +177,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     }else if(dr16.s1 == DR16_SWITCH_DOWN){
         wbr_state=WBR_LQR;
     }
+
+    // Modify here to disable leg function
     // wbr_state = WBR_STANDBY;
 
     // ----------------- Gimbal / Feeder control -----------------
@@ -185,14 +189,24 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->target_gim_yaw_pos += geo->input_yaw_vel*CTRL_DELTA_T;
     geo->target_gim_yaw_pos = wrap_to_pi(geo->target_gim_yaw_pos);
 
-    float gimbal_yaw_vel = g2b_A.gimbal_yaw_vel_imu;
-    const float gimbal_yaw_vel_alpha = 1.0f;
-    geo->gimbal_yaw_vel = gimbal_yaw_vel*gimbal_yaw_vel_alpha + (1.0f-gimbal_yaw_vel_alpha)*geo->gimbal_yaw_vel;
+    // float gimbal_yaw_vel = g2b_A.gimbal_yaw_vel_imu;
+    // const float gimbal_yaw_vel_alpha = 1.0f;
+    // geo->gimbal_yaw_vel = gimbal_yaw_vel*gimbal_yaw_vel_alpha + (1.0f-gimbal_yaw_vel_alpha)*geo->gimbal_yaw_vel;
     
-    geo->gimbal_yaw_pos += geo->gimbal_yaw_vel*CTRL_DELTA_T;
-    geo->gimbal_yaw_pos = wrap_to_pi(geo->gimbal_yaw_pos);
+    // geo->gimbal_yaw_pos += geo->gimbal_yaw_vel*CTRL_DELTA_T;
+    // geo->gimbal_yaw_pos = wrap_to_pi(geo->gimbal_yaw_pos);
 
-    float gimbal_vel_enc_vel = (fmotor.joint_yaw.position - geo->gimbal_yaw_pos)*(1/CTRL_DELTA_T);
+    // float yaw_pos_from_gimbal = wrap_to_pi(g2b_A.gimbal_yaw_pos_imu);
+    // float yaw_pos_diff =  wrap_to_pi(yaw_pos_from_gimbal - geo->gimbal_yaw_pos);
+    // if(BTB_MSG_INTERVAL >= 3){
+    //     geo->gimbal_yaw_vel = 0.0f; 
+    // }else{
+    //     geo->gimbal_yaw_vel = yaw_pos_diff*(1.0f/CTRL_DELTA_T); 
+    // }
+    geo->gimbal_yaw_pos = g2b_A.gimbal_yaw_pos_imu;
+    geo->gimbal_yaw_vel = g2b_B.gimbal_yaw_vel_imu;
+
+    // float gimbal_vel_enc_vel = (fmotor.joint_yaw.position - geo->gimbal_yaw_pos)*(1/CTRL_DELTA_T);
     // geo->gimbal_yaw_pos = fmotor.joint_yaw.position;
     geo->target_gim_yaw_vel = geo->input_yaw_vel + pid_cycle(&gim_yaw_pos_pid, wrap_to_pi(geo->target_gim_yaw_pos - geo->gimbal_yaw_pos), CTRL_DELTA_T);
     
@@ -347,17 +361,19 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->Twr = pid_cycle(&wheel_r_vel_calib_pit, - fmotor.wheel_R.speed, CTRL_DELTA_T);
     }else if(wbr_state == WBR_LQR){
         // const float K_mat[4][10] = {
-        //     {-0.44363f, -2.96722f, -0.71238f, -1.60458f, -7.84784f, -0.87851f, -6.27585f, -0.70180f, -6.23402f, -1.13915f},
-        //     {-0.44363f, -2.96722f, 0.71238f, 1.60458f, -6.27585f, -0.70180f, -7.84784f, -0.87851f, -6.23402f, -1.13915f},
-        //     {1.43105f, 9.46129f, -1.54522f, -3.53900f, 23.39001f, 2.63915f, 0.14020f, 1.00558f, -44.36114f, -4.24812f},
-        //     {1.43105f, 9.46129f, 1.54522f, 3.53900f, 0.14020f, 1.00558f, 23.39001f, 2.63915f, -44.36114f, -4.24812f}
+        //     {-0.44302f, -2.98323f, -0.57788f, -1.30333f, -8.41723f, -0.90468f, -5.08629f, -0.65031f, -9.63352f, -1.53654f},
+        //     {-0.44302f, -2.98323f, 0.57788f, 1.30333f, -5.08629f, -0.65031f, -8.41723f, -0.90468f, -9.63352f, -1.53654f},
+        //     {1.43390f, 9.57541f, -2.23402f, -5.16823f, 28.60222f, 2.83014f, -2.52826f, 1.09292f, -41.70368f, -4.30190f},
+        //     {1.43390f, 9.57541f, 2.23402f, 5.16823f, -2.52826f, 1.09292f, 28.60222f, 2.83014f, -41.70368f, -4.30190f}
         // };
+
         const float K_mat[4][10] = {
-            {-0.44302f, -2.98323f, -0.57788f, -1.30333f, -8.41723f, -0.90468f, -5.08629f, -0.65031f, -9.63352f, -1.53654f},
-            {-0.44302f, -2.98323f, 0.57788f, 1.30333f, -5.08629f, -0.65031f, -8.41723f, -0.90468f, -9.63352f, -1.53654f},
-            {1.43390f, 9.57541f, -2.23402f, -5.16823f, 28.60222f, 2.83014f, -2.52826f, 1.09292f, -41.70368f, -4.30190f},
-            {1.43390f, 9.57541f, 2.23402f, 5.16823f, -2.52826f, 1.09292f, 28.60222f, 2.83014f, -41.70368f, -4.30190f}
+            {-0.55677f, -3.74048f, -0.72423f, -1.63002f, -9.42275f, -1.08336f, -5.97083f, -0.80122f, -11.32081f, -1.75909f},
+            {-0.55677f, -3.74048f, 0.72423f, 1.63002f, -5.97083f, -0.80122f, -9.42275f, -1.08336f, -11.32081f, -1.75909f},
+            {1.59166f, 10.60807f, -2.51792f, -5.80468f, 29.62365f, 3.06002f, -1.82091f, 1.25451f, -49.40210f, -4.99849f},
+            {1.59166f, 10.60807f, 2.51792f, 5.80468f, -1.82091f, 1.25451f, 29.62365f, 3.06002f, -49.40210f, -4.99849f}
         };
+
 
         geo->lqr_err[0]= 0.0f - geo->s;
         geo->lqr_err[1]= geo->target_ds - geo->ds;
@@ -450,6 +466,7 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
+    geo->T_yaw = 0.0f;
     fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
 
     // Implement board-to-board communication
@@ -535,13 +552,24 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case JOINT_YAW_FEEDBACKID:
         parse_feedback_DM4310(msg, &motors.joint_yaw, JOINT_YAW_CTRLID);
         break;
-
     case G2B_MSG_A_ID:
         memcpy(&g2b_A, msg, 8);
         BTB_UPDATE_CNTDOWN();
         break;
+    case G2B_MSG_B_ID:
+        memcpy(&g2b_B, msg, 8);
+        BTB_UPDATE_CNTDOWN();
+        break;
+    case G2B_MSG_C_ID:
+        memcpy(&g2b_C, msg, 8);
+        BTB_UPDATE_CNTDOWN();
+        break;
 
     default:
+        volatile int a=ID;
+        volatile uint8_t temp[8];
+        memcpy(temp, msg, 8);
+        a++;
         break;
     }
 
@@ -635,7 +663,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     // }
     // input_pitch_vel = dr16.channel[1]*2.2f;
     const float input_pitch_alpha = 0.1f;
-    // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_pitch_alpha) + -dr16.mouse.y*0.015f*input_pitch_alpha;
     geo->input_pitch_vel = (float)b2g_B.target_pitch_vel*3E-4f;
 
     robot_geo.target_position_pitch += geo->input_pitch_vel*CTRL_DELTA_T; // range from -1 to 1
@@ -684,18 +711,32 @@ void role_controller_step(const float CTRL_DELTA_T){
     // pitch_torque = -1.96f * imu_data.pitch * imu_data.pitch + 1.2982f * imu_data.pitch + 0.5304f;
     fdcanx_send_data(&hfdcan3, 0x0D, set_torque_DM4310(motors.motor_pitch.tranmitbuf, pitch_torque), 8);
 
-    g2b_A.gimbal_yaw_vel_imu = geo->yaw_vel_imu;
+    g2b_A.gimbal_yaw_pos_imu = imu_data.yaw;
     fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
+
+    g2b_B.gimbal_yaw_vel_imu = geo->yaw_vel_imu;
+    fdcanx_send_data(&hfdcan1, G2B_MSG_B_ID, (uint8_t *)&g2b_B, 8);
+
+    float predict_yaw, predict_pitch, predict_vyaw, predict_vpitch, predict_distence;
+    int vision_tracked = vision_get_armorplate(&predict_yaw, &predict_pitch, 
+        &predict_vyaw, &predict_vpitch, &predict_distence, 10.0f);
+
+    g2b_C.aim_yaw_pos = predict_yaw;
+    g2b_C.aim_yaw_vel = predict_vyaw;
+    g2b_C.vision_tracked = vision_tracked;
+    g2b_C.vision_locked = 0;
+    fdcanx_send_data(&hfdcan1, G2B_MSG_C_ID, (uint8_t *)&g2b_C, 8);
+
     // print speed
     vofa.val[0]=fmotor.wheel_left.speed;
     vofa.val[1]=-fmotor.wheel_right.speed;
 
     // print current
     vofa.val[2]=vision_FromRos.packet.z;
-    vofa.val[3]=geo->input_pitch_vel;
+    vofa.val[3]=predict_pitch;
 
     // pid for speed loop
-    vofa.val[4]=target_speed_pitch;
+    vofa.val[4]=predict_yaw;
     vofa.val[5]=imu_data.yaw;
     vofa.val[6]=imu_data.pitch;
     vofa.val[7]=imu_data.roll;

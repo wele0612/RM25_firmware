@@ -76,3 +76,6 @@ typedef union {
 
 void vision_recv_byte(uint8_t data);
 uint8_t *vision_send_pack(McuToRosData_t *toRos);
+
+int vision_get_armorplate(float *yaw, float *pitch, float *vyaw, float *vpitch,
+    float *distence, float predict_time);
