@@ -27,7 +27,11 @@ void controller_cycle(const float CTRL_DELTA_T){
         McuToRosPacket_t* toRos = &(vision_ToRos.packet);
         toRos->detect_color = 1;
         toRos->roll = imu_data.roll; 
+        #ifdef REVERSE_PITCH
+        toRos->pitch = imu_data.pitch;
+        #else
         toRos->pitch = -imu_data.pitch; // Note: ROS and ICM42688 has opposite defination for Pitch
+        #endif
         toRos->yaw = imu_data.yaw;
         toRos->reset_tracker = 0;
         HAL_UART_StateTypeDef state = HAL_UART_GetState(AIMING_UART);
