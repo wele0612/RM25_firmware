@@ -79,3 +79,8 @@ uint8_t *vision_send_pack(McuToRosData_t *toRos);
 
 int vision_get_armorplate(float *yaw, float *pitch, float *vyaw, float *vpitch,
     float *distence, float predict_time);
+
+int vision_get_body(float *yaw, float *pitch, float *vyaw, float *vpitch,
+    float *distence, float predict_time);
+
+float third_order_fit(const float coes[], float x);

@@ -31,12 +31,15 @@ __BTB_VAR g2b_B_t g2b_B;
 
 typedef struct __attribute__((packed)) {
     int16_t aim_yaw_pos; // 1e-4 RAD/LSB
+    
     int16_t aim_yaw_vel; // 1e-4 RAD/LSB
+
     uint8_t vision_online : 1;
     uint8_t vision_tracked : 1;
     uint8_t vision_locked : 1;
     uint8_t rsvd: 5;
-    uint8_t PAD[2];
+
+    int16_t aim_distence; // 1e-3 M/LSB
 }g2b_C_t;
 __BTB_VAR g2b_C_t g2b_C;
 #define G2B_MSG_C_ID 0x12
@@ -55,8 +58,9 @@ typedef struct __attribute__((packed)) {
     int16_t target_pitch_vel; // 3E-4rad/s per LSB
     uint8_t flywheel_enabled : 1; // For hero
     uint8_t feeder_push : 1; // For hero
-    uint8_t aim_enabled : 1;
-    uint8_t rsvd:5;
+    uint8_t aim_enabled : 1; // Enable auto aim
+    uint8_t aim_robot_centre_not_armor : 1; // Aim robot centre, instead of armor
+    uint8_t rsvd:4;
     uint8_t gimbal_mode;
 } b2g_B_t;
 __BTB_VAR b2g_B_t b2g_B;

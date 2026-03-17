@@ -173,4 +173,82 @@ int vision_get_armorplate(float *yaw, float *pitch, float *vyaw, float *vpitch,
 
     return 1;
 }
+
+/**
+ * @brief 获取预测后的车体中心。如果目标距离比较远，装甲板预测的效果不好，就启用这个
+ * @param[out] yaw       目标方位角（弧度，odom坐标系，相对于x轴）
+ * @param[out] pitch     目标俯仰角（弧度，odom坐标系，相对于水平面）
+ * @param[out] vyaw      目标方位角速度（弧度/秒，用于前馈）
+ * @param[out] vpitch    目标俯仰角速度（弧度/秒，用于前馈）
+ * @param[out] distence  目标距离（米）
+ * @param[in]  predict_time  预测时间（毫秒）
+ * @return     0: 无有效目标，1: 成功计算
+ */
+int vision_get_body(float *yaw, float *pitch, float *vyaw, float *vpitch, 
+    float *distence, float predict_time)
+{
+    // 检查是否有有效追踪目标
+    if (!vision_FromRos.packet.tracking) {
+        return 0;
+    }
+
+    /* 1. 提取当前状态数据（车体模式只需要平移状态，忽略旋转和装甲板几何参数） */
+    float x = vision_FromRos.packet.x;
+    float y = vision_FromRos.packet.y;
+    float z = vision_FromRos.packet.z;
+    float vx = vision_FromRos.packet.vx;
+    float vy = vision_FromRos.packet.vy;
+    float vz = vision_FromRos.packet.vz;
+    // 车体模式忽略：robot_yaw, v_yaw, r1, r2, dz, armors_num
+
+    /* 2. 恒速度模型预测 predict_time 后的车体中心位置 */
+    float dt = predict_time * MS_TO_S;
+    
+    float x_pred = x + vx * dt;
+    float y_pred = y + vy * dt;
+    float z_pred = z + vz * dt;
+
+    /* 3. 计算预测位置到云台（odom原点）的距离 */
+    float dx = x_pred;
+    float dy = y_pred;
+    float dz_pos = z_pred;
+    
+    float horizontal_dist = sqrtf(dx*dx + dy*dy);
+    float total_dist = sqrtf(dx*dx + dy*dy + dz_pos*dz_pos);
+
+    // 距离有效性检查
+    if (total_dist < MIN_VALID_DISTANCE) {
+        return 0;
+    }
+
+    /* 4. 计算指向车体中心的瞄准角度 */
+    float yaw_target = atan2f(dy, dx);           // 方位角
+    float pitch_target = atan2f(dz_pos, horizontal_dist);  // 俯仰角
+
+    /* 5. 计算前馈角速度（车体无旋转，仅平移运动引起角度变化） */
+    // 方位角速度：由水平速度横向分量引起
+    // vyaw = (vy*cos(yaw) - vx*sin(yaw)) / horizontal_dist
+    *vyaw = (vy * cosf(yaw_target) - vx * sinf(yaw_target)) / horizontal_dist;
+    
+    // 俯仰角速度：由垂直运动和径向距离变化共同引起
+    // 径向速度（远离云台为正）
+    float radial_vel_away = vx * cosf(yaw_target) + vy * sinf(yaw_target);
+    *vpitch = (vz * horizontal_dist - z_pred * radial_vel_away) / (total_dist * total_dist);
+
+    /* 6. 输出结果 */
+    *yaw = yaw_target;
+    *pitch = pitch_target;
+    *distence = total_dist;
+
+    return 1;
+}
+
+float third_order_fit(const float coes[], float x)
+{
+    // 使用Horner方法高效计算: ((a*x + b)*x + c)*x + d
+    // 仅需3次乘法和3次加法，比直接计算更精确且快速
+    return ((coes[0] * x + coes[1]) * x + coes[2]) * x + coes[3];
+}
+
+
 #endif

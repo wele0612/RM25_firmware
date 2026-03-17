@@ -16,8 +16,12 @@ void controller_init(){
 void controller_cycle(const float CTRL_DELTA_T){
     role_controller_step(CTRL_DELTA_T);
 
-    if(vision_FromRos.packet.tracking && (HAL_GetTick()%200) > 100){
-        buzzer_set_freq(TUNE_A6);
+    if(vision_FromRos.packet.tracking){
+        if((HAL_GetTick()%480) > 240){
+            buzzer_set_freq(TUNE_D6_SHARP_E6_FLAT);
+        }else{
+            buzzer_set_freq(TUNE_B6);
+        }
         buzzer_on();
     }else{
         buzzer_off();

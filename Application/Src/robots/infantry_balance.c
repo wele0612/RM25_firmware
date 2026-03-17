@@ -721,8 +721,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     int vision_tracked = vision_get_armorplate(&predict_yaw, &predict_pitch, 
         &predict_vyaw, &predict_vpitch, &predict_distence, 10.0f);
 
-    g2b_C.aim_yaw_pos = predict_yaw;
-    g2b_C.aim_yaw_vel = predict_vyaw;
+    g2b_C.aim_yaw_pos = (int16_t)(predict_yaw*1E4);
+    g2b_C.aim_yaw_vel = (int16_t)(predict_vyaw*1E4);
     g2b_C.vision_tracked = vision_tracked;
     g2b_C.vision_locked = 0;
     fdcanx_send_data(&hfdcan1, G2B_MSG_C_ID, (uint8_t *)&g2b_C, 8);
