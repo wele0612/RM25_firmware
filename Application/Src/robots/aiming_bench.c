@@ -10,32 +10,22 @@
 
 #ifdef CONFIG_PLATFORM_BASE
 
-PID_t single_LF_wheel_velocity_pid={
-    .P=0.005f,
-    .I=0.0f,
-    .D=0.0f,
-    .integral_max=0.01f
+PID_t vy_pid={
+    .P = 6.0f,
+    .I = 0.0f,
+    .D = 0.0f,
 };
 
-PID_t single_LB_wheel_velocity_pid = {
-    .P=0.005f,
-    .I=0.0f,
-    .D=0.0f,
-    .integral_max=0.01f
+PID_t vx_pid={
+    .P = 6.0f,
+    .I = 0.0f,
+    .D = 0.0f,
 };
 
-PID_t single_RF_wheel_velocity_pid={
-    .P=0.005f,
-    .I=0.0f,
-    .D=0.0f,
-    .integral_max=0.01f
-};
-
-PID_t single_RB_wheel_velocity_pid={
-    .P=0.005f,
-    .I=0.0f,
-    .D=0.0f,
-    .integral_max=0.01f
+PID_t vyaw_pid={
+    .P = 1.5f,
+    .I = 0.0f,
+    .D = 0.0f,
 };
 
 void role_controller_init(){
@@ -45,39 +35,69 @@ void role_controller_init(){
 
 void role_controller_step(const float CTRL_DELTA_T){
     uint8_t tx_buffer[8]; 
-    const float wheel_radius = 0.154f;
 
-    const float target_rpm_coe = 60.0f/(2*PI*wheel_radius)*(1/M3508_GEAR_RATIO);
+    robot_ctrl_t *geo = &robot_geo;
 
-    robot_geo.target_speed_x = target_rpm_coe*dr16.channel[0]*1.0f;
-    robot_geo.target_speed_y = target_rpm_coe*dr16.channel[1]*1.0f;
-    robot_geo.target_omega_yaw = 500.0f*dr16.channel[2];
+    geo->target_vy = dr16.channel[1]*1.2f;
+    geo->target_vx = dr16.channel[0]*1.2f;
+    // geo->target_vyaw = dr16.channel[2]*2.0f;
 
-    const float target_rpm_lf=robot_geo.target_speed_y + robot_geo.target_speed_x + robot_geo.target_omega_yaw; 
-    const float target_rpm_lb=robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;
-    const float target_rpm_rf=-robot_geo.target_speed_y + robot_geo.target_speed_x + robot_geo.target_omega_yaw;
-    const float target_rpm_rb=-robot_geo.target_speed_y - robot_geo.target_speed_x + robot_geo.target_omega_yaw;   
+    if(dr16.s2 == DR16_SWITCH_DOWN){
+        geo->target_vyaw = -dr16.channel[2]*1.0f;
+        geo->yaw_offset = imu_data.yaw;
+    }else if(dr16.s2 == DR16_SWITCH_MID){
+        geo->target_vyaw = 0.5f*2.0f*PI;
+    }
 
-    float motor_lf_err=target_rpm_lf-motors.wheel_LF.speed;
-    float motor_lb_err=target_rpm_lb-motors.wheel_LB.speed;
-    float motor_rf_err=target_rpm_rf-motors.wheel_RF.speed;
-    float motor_rb_err=target_rpm_rb-motors.wheel_RB.speed;
-    const float lf_torque = pid_cycle(&single_LF_wheel_velocity_pid, motor_lf_err, CTRL_DELTA_T);
-    const float lb_torque = pid_cycle(&single_LB_wheel_velocity_pid, motor_lb_err, CTRL_DELTA_T);
-    const float rf_torque = pid_cycle(&single_RF_wheel_velocity_pid, motor_rf_err, CTRL_DELTA_T);
-    const float rb_torque = pid_cycle(&single_RB_wheel_velocity_pid, motor_rb_err, CTRL_DELTA_T);
+    const float WHEEL_RADIUS = 0.154f * 0.5f;
+    const float RPM_TO_MS = RPMtoRADS*WHEEL_RADIUS*M3508_GEAR_RATIO;
 
-    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_torque_M3508(tx_buffer,\
-        lf_torque, lb_torque, rf_torque, rb_torque), 8);
+    const float v_alpha = 0.3f;
+    float vy = (RPM_TO_MS*0.25f)*(motors.wheel_LF.speed + motors.wheel_LB.speed - motors.wheel_RF.speed - motors.wheel_RB.speed);
+    float vx = (RPM_TO_MS*0.25f)*(motors.wheel_LF.speed - motors.wheel_LB.speed + motors.wheel_RF.speed - motors.wheel_RB.speed);
+    
+    geo->vy_b = vy*v_alpha + geo->vy_b*(1.0f - v_alpha);
+    geo->vx_b = vx*v_alpha + geo->vx_b*(1.0f - v_alpha);
+    geo->vyaw = imu_data.gyro[2]*DEGtoRAD;
+
+    const float body_yaw_offset = imu_data.yaw - geo->yaw_offset;
+    const float cosby = cosf(body_yaw_offset);
+    const float sinby = sinf(body_yaw_offset);
+
+    // // Convert body coordinate system to gimbal coordinate system.
+    geo->vx = geo->vx_b * cosby + geo->vy_b * -sinby;
+    geo->vy = geo->vx_b * sinby + geo->vy_b * cosby;
+
+
+    float F_y = pid_cycle(&vy_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
+    float F_x = pid_cycle(&vx_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
+    float T_yaw = pid_cycle(&vyaw_pid, geo->target_vyaw - geo->vyaw, CTRL_DELTA_T);
+
+    float F_x_b = F_x * cosby + F_y * sinby;
+    float F_y_b = F_x * -sinby + F_y * cosby;
+
+    float T_LF=0.0f, T_LB=0.0f, T_RF=0.0f, T_RB=0.0f;
+
+    T_LF = F_y_b + F_x_b - T_yaw;
+    T_LB = F_y_b - F_x_b - T_yaw;
+    T_RF = -F_y_b + F_x_b - T_yaw;
+    T_RB = -F_y_b - F_x_b - T_yaw;
+
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buffer,
+        T_LF*(1.0f/M3508_TORQUE_CONSTANT), 
+        T_LB*(1.0f/M3508_TORQUE_CONSTANT), 
+        T_RF*(1.0f/M3508_TORQUE_CONSTANT), 
+        T_RB*(1.0f/M3508_TORQUE_CONSTANT)
+    ), 8);
 
     vofa.val[0]=imu_data.yaw;
     vofa.val[1]=imu_data.pitch;
     vofa.val[2]=imu_data.gyro[2];
     vofa.val[3]=imu_data.gyro[1];
 
-    vofa.val[4]=dr16.channel[0];
-    vofa.val[5]=dr16.channel[1];
-    vofa.val[6]=dr16.channel[2];
+    vofa.val[4]=geo->vy;
+    vofa.val[5]=geo->vx;
+    vofa.val[6]=geo->vyaw;
     vofa.val[7]=dr16.channel[3];
 
     vofa.val[8]=(float)robot_config.test_val;
