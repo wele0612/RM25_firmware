@@ -74,7 +74,7 @@ void dr16_on_change(){
         }
     }
 
-    float pitch_incr, yaw_incr;
+    float pitch_incr = 0.0f, yaw_incr=0.0f;
 
     if(!(dr16.key.v & DR16_KEY_B_BIT)){
 
@@ -98,8 +98,8 @@ void dr16_on_change(){
             yaw_incr *= 10.0f;
             pitch_incr *= 10.0f;
         }else if((dr16.key.v & DR16_KEY_CTRL_BIT)){
-            yaw_incr *= 0.3f;
-            pitch_incr *= 0.3f;
+            yaw_incr *= 0.2f;
+            pitch_incr *= 0.2f;
         }
     }
 
@@ -232,6 +232,10 @@ void role_controller_step(const float CTRL_DELTA_T){
         }else{
             geo->target_vyaw = 0.0f;
         }
+    }else{
+        geo->target_vy = 0.0f;
+        geo->target_vx = 0.0f;
+        geo->target_vyaw = 0.0f;
     }
 
     
@@ -331,12 +335,12 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     geo->gimbal_mtr_pitch_pos = (float)(g2b_A.gimbal_pitch)*1E-4f;
     geo->gimbal_mtr_fold_pos = (float)(g2b_A.gimbal_fold)*1E-4f;
-    const float dm_motor_alpha = 0.2f;
+    const float dm_motor_alpha = 0.1f;
     geo->gimbal_mtr_yaw_vel = dm_motor_alpha*fmotor.yaw.speed + (1.0f-dm_motor_alpha)*geo->gimbal_mtr_yaw_vel;
     geo->gimbal_mtr_yaw_pos = wrap_to_pi(fmotor.yaw.position);
 
     geo->gimbal_abs_yaw_vel = g2b_B.gimbal_yaw_vel_imu;
-    const float yaw_drift_threshold = 0.015f;
+    const float yaw_drift_threshold = 0.01f;
     if(gim_state == GIM_SNIPER && BTB_ONLINE){
         
         if(fabsf(geo->gimbal_abs_yaw_vel) < yaw_drift_threshold){
@@ -438,7 +442,10 @@ void role_controller_step(const float CTRL_DELTA_T){
         }else{
             // geo->target_yaw_pos = wrap_to_pi(geo->target_yaw_pos + geo->input_yaw_vel*CTRL_DELTA_T);
             
-            geo->target_yaw_vel = geo->input_yaw_vel + limit_val(pid_cycle(&g_gimbal_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->gimbal_abs_yaw_pos), CTRL_DELTA_T), 5.0f);
+            // geo->target_yaw_vel = geo->input_yaw_vel + limit_val(pid_cycle(&g_gimbal_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->gimbal_abs_yaw_pos), CTRL_DELTA_T), 5.0f);
+
+            geo->target_yaw_vel = geo->input_yaw_vel + limit_val(pid_cycle(&f_gimbal_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->gimbal_mtr_yaw_pos), CTRL_DELTA_T), 5.0f);
+
 
             if(gim_state == GIM_SNIPER){
                 geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 1.0f);
@@ -448,7 +455,10 @@ void role_controller_step(const float CTRL_DELTA_T){
             }
 
             float gimbal_yaw_pid_coe = 0.2f + fabsf(cosf(geo->gimbal_mtr_pitch_pos))*(0.8f);
-            geo->T_yaw = gimbal_yaw_pid_coe * pid_cycle(&g_gimbal_yaw_vel_pid, geo->target_yaw_vel - geo->gimbal_abs_yaw_vel, CTRL_DELTA_T);
+            // geo->T_yaw = gimbal_yaw_pid_coe * pid_cycle(&g_gimbal_yaw_vel_pid, geo->target_yaw_vel - geo->gimbal_abs_yaw_vel, CTRL_DELTA_T);
+            geo->T_yaw = gimbal_yaw_pid_coe * pid_cycle(&f_gimbal_yaw_vel_pid, geo->target_yaw_vel - geo->gimbal_mtr_yaw_vel, CTRL_DELTA_T);
+        
+        
         }
         
         }else if(BTB_ONLINE && (gim_state != GIM_STANDBY)){
@@ -717,11 +727,13 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(BTB_ONLINE){
         if(b2g_B.flywheel_enabled){
-            if(gim_state == GIM_SNIPER){
-                geo->target_flywheel_rpm = 4075.0f;
-            }else{
-                geo->target_flywheel_rpm = 4100.0f;
-            }
+            // if(gim_state == GIM_SNIPER){
+            //     // geo->target_flywheel_rpm = 3750.0f;
+            //     geo->target_flywheel_rpm = 3000.0f;
+            // }else{
+            //     geo->target_flywheel_rpm = 4000.0f;
+            // }
+            geo->target_flywheel_rpm = 4025.0f;
             
         }else{
             geo->target_flywheel_rpm = 1000.0f;
