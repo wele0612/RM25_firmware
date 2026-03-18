@@ -54,7 +54,7 @@ __BTB_VAR g2b_C_t g2b_C;
 // #define B2G_MSG_A_ID 0x20
 
 typedef struct __attribute__((packed)) {
-    float base_roll;
+    float sni_target_pitch;
     int16_t target_pitch_vel; // 3E-4rad/s per LSB
     uint8_t flywheel_enabled : 1; // For hero
     uint8_t feeder_push : 1; // For hero

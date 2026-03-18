@@ -38,15 +38,15 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     robot_ctrl_t *geo = &robot_geo;
 
-    geo->target_vy = dr16.channel[1]*1.2f;
-    geo->target_vx = dr16.channel[0]*1.2f;
+    geo->target_vy = dr16.channel[1]*1.5f;
+    geo->target_vx = dr16.channel[0]*1.5f;
     // geo->target_vyaw = dr16.channel[2]*2.0f;
 
     if(dr16.s2 == DR16_SWITCH_DOWN){
         geo->target_vyaw = -dr16.channel[2]*1.0f;
         geo->yaw_offset = imu_data.yaw;
     }else if(dr16.s2 == DR16_SWITCH_MID){
-        geo->target_vyaw = 0.5f*2.0f*PI;
+        geo->target_vyaw = 0.7f*2.0f*PI;
     }
 
     const float WHEEL_RADIUS = 0.154f * 0.5f;

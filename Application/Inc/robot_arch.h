@@ -251,6 +251,9 @@
             float vyaw_gyro;
             float vyaw_wheel;
 
+            float gimbal_yaw_f; // Anti-drift yaw
+            float gimbal_vyaw_f; // Anti-offset yaw velocity
+
             float vx;
             float vy;
 
@@ -291,6 +294,8 @@
             float target_yaw_vel; // Gimbal Yaw vel
             float target_yaw_pos; // Gimbal Yaw pos
 
+            float target_sni_pitch_pos;
+
             float target_agi_vel;
             float target_agi_pos;
         }robot_ctrl_t;
@@ -307,9 +312,17 @@
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
-            float target_speed_x;
-            float target_speed_y;
-            float target_omega_yaw;
+            float vx;
+            float vy;
+            float vx_b;
+            float vy_b;
+            float vyaw;
+
+            float yaw_offset;
+
+            float target_vx;
+            float target_vy;
+            float target_vyaw;
         }robot_ctrl_t;
     #endif
 #endif

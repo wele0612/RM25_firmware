@@ -74,6 +74,43 @@ void dr16_on_change(){
         }
     }
 
+    float pitch_incr, yaw_incr;
+
+    if(!(dr16.key.v & DR16_KEY_B_BIT)){
+
+        if((dr16.key.v & DR16_KEY_W_BIT) && !(dr16.previous.key.v & DR16_KEY_W_BIT)){
+            pitch_incr = 0.3f*DEGtoRAD;
+        }else if((dr16.key.v & DR16_KEY_S_BIT) && !(dr16.previous.key.v & DR16_KEY_S_BIT)){
+            pitch_incr = -0.3f*DEGtoRAD;
+        }else{
+            pitch_incr = 0.0f;
+        }
+
+        if((dr16.key.v & DR16_KEY_D_BIT) && !(dr16.previous.key.v & DR16_KEY_D_BIT)){
+            yaw_incr = -0.3f*DEGtoRAD;
+        }else if((dr16.key.v & DR16_KEY_A_BIT) && !(dr16.previous.key.v & DR16_KEY_A_BIT)){
+            yaw_incr = 0.3f*DEGtoRAD;
+        }else{
+            yaw_incr = 0.0f*DEGtoRAD;
+        }
+
+        if((dr16.key.v & DR16_KEY_SHIFT_BIT)){
+            yaw_incr *= 10.0f;
+            pitch_incr *= 10.0f;
+        }else if((dr16.key.v & DR16_KEY_CTRL_BIT)){
+            yaw_incr *= 0.3f;
+            pitch_incr *= 0.3f;
+        }
+    }
+
+    geo->target_yaw_pos = wrap_to_pi(geo->target_yaw_pos + yaw_incr);
+    geo->target_sni_pitch_pos += pitch_incr;
+
+    if(geo->target_sni_pitch_pos > 80.0f*DEGtoRAD){
+        geo->target_sni_pitch_pos = 80.0f*DEGtoRAD;
+    }else if(geo->target_sni_pitch_pos < 20.0f*DEGtoRAD){
+        geo->target_sni_pitch_pos = 20.0f*DEGtoRAD;
+    }
     return;
 }
 
@@ -164,33 +201,42 @@ void role_controller_step(const float CTRL_DELTA_T){
     __enable_irq();
 
     float accelerate_factor = 1.0f;
-    if(dr16.key.v & DR16_KEY_SHIFT_BIT){
-        accelerate_factor = 2.5f;
+    // if(dr16.key.v & DR16_KEY_SHIFT_BIT){
+    //     accelerate_factor = 2.5f;
+    // }
+
+    float pitch_incr;
+    float yaw_incr;
+
+    if(dr16.key.v & DR16_KEY_B_BIT){
+        if(dr16.key.v & DR16_KEY_W_BIT){
+            geo->target_vy = accelerate_factor*1.0f;
+        }else if(dr16.key.v & DR16_KEY_S_BIT){
+            geo->target_vy = accelerate_factor*-1.0f;
+        }else{
+            geo->target_vy = 0.0f;
+        }
+
+        if(dr16.key.v & DR16_KEY_D_BIT){
+            geo->target_vx = accelerate_factor*1.0f;
+        }else if(dr16.key.v & DR16_KEY_A_BIT){
+            geo->target_vx = accelerate_factor*-1.0f;
+        }else{
+            geo->target_vx = 0.0f;
+        }
+
+        if(dr16.key.v & DR16_KEY_Q_BIT){
+            geo->target_vyaw = accelerate_factor*0.5f;
+        }else if(dr16.key.v & DR16_KEY_E_BIT){
+            geo->target_vyaw = accelerate_factor*-0.5f;
+        }else{
+            geo->target_vyaw = 0.0f;
+        }
     }
 
-    if(dr16.key.v & DR16_KEY_W_BIT){
-        geo->target_vy = accelerate_factor*1.6f;
-    }else if(dr16.key.v & DR16_KEY_S_BIT){
-        geo->target_vy = accelerate_factor*-1.6f;
-    }else{
-        geo->target_vy = 0.0f;
-    }
+    
 
-    if(dr16.key.v & DR16_KEY_D_BIT){
-        geo->target_vx = accelerate_factor*1.6f;
-    }else if(dr16.key.v & DR16_KEY_A_BIT){
-        geo->target_vx = accelerate_factor*-1.6f;
-    }else{
-        geo->target_vx = 0.0f;
-    }
-
-    if(dr16.key.v & DR16_KEY_Q_BIT){
-        geo->target_vyaw = accelerate_factor*0.5f;
-    }else if(dr16.key.v & DR16_KEY_E_BIT){
-        geo->target_vyaw = accelerate_factor*-0.5f;
-    }else{
-        geo->target_vyaw = 0.0f;
-    }
+    // DR16_KEY_SHIFT_BIT
 
     int enable_auto_aim = dr16.mouse.press_r;
 
@@ -208,10 +254,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     }else{
         control_sensitivity = 0.02f;
     }
-    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*control_sensitivity*input_mouse_alpha;
-    geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*control_sensitivity*input_mouse_alpha;
+    // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*control_sensitivity*input_mouse_alpha;
+    // geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*control_sensitivity*input_mouse_alpha;
 
-    
+    geo->input_pitch_vel*=0.5f;
+
     b2g_B.flywheel_enabled = (dr16.s2 == DR16_SWITCH_UP);
 
     // geo->target_yaw_vel = dr16.channel[3]*1.5f;
@@ -288,8 +335,18 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->gimbal_mtr_yaw_vel = dm_motor_alpha*fmotor.yaw.speed + (1.0f-dm_motor_alpha)*geo->gimbal_mtr_yaw_vel;
     geo->gimbal_mtr_yaw_pos = wrap_to_pi(fmotor.yaw.position);
 
-    geo->gimbal_abs_yaw_pos = g2b_A.gimbal_yaw_pos_imu;
     geo->gimbal_abs_yaw_vel = g2b_B.gimbal_yaw_vel_imu;
+    const float yaw_drift_threshold = 0.015f;
+    if(gim_state == GIM_SNIPER && BTB_ONLINE){
+        
+        if(fabsf(geo->gimbal_abs_yaw_vel) < yaw_drift_threshold){
+            geo->gimbal_abs_yaw_vel = 0.0f;
+        }
+
+        geo->gimbal_abs_yaw_pos += geo->gimbal_abs_yaw_vel*CTRL_DELTA_T;
+    }else{
+        geo->gimbal_abs_yaw_pos = g2b_A.gimbal_yaw_pos_imu;
+    }
 
     // State-transition functions
 
@@ -337,9 +394,12 @@ void role_controller_step(const float CTRL_DELTA_T){
         if(is_pitch_down){
             geo->target_yaw_pos = 0.0f;
             gim_state = GIM_IMU; // 云台上升到位，切换回IMU模式
+        }else if(dr16.s1 == DR16_SWITCH_DOWN){
+            gim_state = GIM_SNIPER;    // 进吊射模式
         }
         break;
     case GIM_SNIPER:
+        enable_folding_fixed_gimbal = 1;
         if(dr16.s1 != DR16_SWITCH_DOWN){ // 退出吊射模式
             gim_state = GIM_IMU_PREP_GIMDOWN;
         }
@@ -376,8 +436,16 @@ void role_controller_step(const float CTRL_DELTA_T){
 
             geo->target_yaw_pos = geo->gimbal_abs_yaw_pos;
         }else{
-            geo->target_yaw_pos = wrap_to_pi(geo->target_yaw_pos + geo->input_yaw_vel*CTRL_DELTA_T);
+            // geo->target_yaw_pos = wrap_to_pi(geo->target_yaw_pos + geo->input_yaw_vel*CTRL_DELTA_T);
+            
             geo->target_yaw_vel = geo->input_yaw_vel + limit_val(pid_cycle(&g_gimbal_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->gimbal_abs_yaw_pos), CTRL_DELTA_T), 5.0f);
+
+            if(gim_state == GIM_SNIPER){
+                geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 1.0f);
+                if(fabsf(geo->target_yaw_vel) < yaw_drift_threshold){
+                    geo->target_yaw_vel = 0.0f;
+                }
+            }
 
             float gimbal_yaw_pid_coe = 0.2f + fabsf(cosf(geo->gimbal_mtr_pitch_pos))*(0.8f);
             geo->T_yaw = gimbal_yaw_pid_coe * pid_cycle(&g_gimbal_yaw_vel_pid, geo->target_yaw_vel - geo->gimbal_abs_yaw_vel, CTRL_DELTA_T);
@@ -459,6 +527,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->T_RF*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
         geo->T_RB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB)), 8);
 
+    // geo->T_yaw=0.0f;
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, set_torque_DM4310(motors.yaw.tranmitbuf, geo->T_yaw), 8);
 
     // geo->T_agi=0.0f;
@@ -468,7 +537,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     geo->input_pitch_vel = limit_val(geo->input_pitch_vel, 6.0f);
     b2g_B.target_pitch_vel = (int16_t)(geo->input_pitch_vel*(1/3E-4f));
-    b2g_B.base_roll = imu_data.roll;
+    b2g_B.sni_target_pitch = geo->target_sni_pitch_pos;
     b2g_B.aim_enabled = enable_auto_aim;
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
@@ -476,17 +545,17 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[1]=geo->F_y;
     vofa.val[2]=geo->T_base_yaw;
 
-    vofa.val[3]=geo->vx;
-    vofa.val[4]=geo->vy;
-    vofa.val[5]=geo->vy;
-    vofa.val[6]=launch_state;
+    vofa.val[3]=geo->gimbal_abs_yaw_vel;
+    vofa.val[4]=geo->gimbal_abs_yaw_pos;
+    vofa.val[5]=fmotor.yaw.position;
+    vofa.val[6]=gim_state;
 
     // vofa.val[7]=geo->target_agi_pos;
     // vofa.val[8]=geo->agi_vel;
     // vofa.val[9]=fmotor.agi.position;
 
-    vofa.val[7]=geo->agi_pos;
-    vofa.val[8]=geo->target_agi_pos;
+    vofa.val[7]=geo->target_yaw_pos;
+    vofa.val[8]=geo->target_sni_pitch_pos;
     vofa.val[9]=fabsf(geo->target_agi_pos - geo->agi_pos);
 }
 
@@ -651,7 +720,7 @@ void role_controller_step(const float CTRL_DELTA_T){
             if(gim_state == GIM_SNIPER){
                 geo->target_flywheel_rpm = 4075.0f;
             }else{
-                geo->target_flywheel_rpm = 3500.0f;
+                geo->target_flywheel_rpm = 4100.0f;
             }
             
         }else{
@@ -745,9 +814,25 @@ void role_controller_step(const float CTRL_DELTA_T){
                 pid_cycle(&g_pitch_pos_pid, target_pitch_pos - geo->abs_pitch_pos, CTRL_DELTA_T);
             }
 
-            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
-                set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
+            // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
+            //     set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
 
+            geo->target_pitch_pos = 20.0f*DEGtoRAD;
+            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5,
+                set_position_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_pos*RADtoDEG, 20.0f), 8);
+            
+            break;
+
+        case GIM_SNIPER:
+            if(BTB_ONLINE){
+                geo->target_pitch_pos = b2g_B.sni_target_pitch;
+            }else{
+                geo->target_pitch_pos = 50.0f*DEGtoRAD;
+            }
+            
+            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5,
+                set_position_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_pos*RADtoDEG, 20.0f), 8);
+            
             break;
 
         case GIM_IMU_PREP_GIMDOWN:
@@ -757,8 +842,8 @@ void role_controller_step(const float CTRL_DELTA_T){
                 2.0f*DEGtoRAD - geo->mtr_pitch_pos, CTRL_DELTA_T);
             
             limit_val(geo->target_pitch_vel, 1.5f);
-            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
-                set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
+            // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
+            //     set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
             break;
         case GIM_FOLD:
         case GIM_IMU_PREP_FOLDRISE:
@@ -768,13 +853,14 @@ void role_controller_step(const float CTRL_DELTA_T){
                 FOLD_MODE_PITCH_MOTOR_RAD - geo->mtr_pitch_pos, CTRL_DELTA_T);
             
             limit_val(geo->target_pitch_vel, 1.5f);
-            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
-                set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
+
+            // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
+            //     set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
             break;
         
         default:
-            fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
-                set_speed_MyAct(motors.pitch.tranmitbuf, 0.0f, 0), 8);
+            // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
+            //     set_speed_MyAct(motors.pitch.tranmitbuf, 0.0f, 0), 8);
             break;
     }
 
@@ -844,16 +930,16 @@ void role_controller_step(const float CTRL_DELTA_T){
     //     set_torque_X4_36(motors.pitch.tranmitbuf, -geo->T_pitch), 8);
 
     const float FOLDING_MAX_SPEED_DPS = 60.0f;
-    const float NORMAL_POSITION_DEG = 0.5f;
+    const float NORMAL_POSITION_DEG = 1.2f;
     const float DOWN_POSITION_DEG = -129.5f; //(19.5+110)
     // const float DOWN_POSITION_DEG = -90.0f;
-    if(gimbal_mode == GIM_FOLD){
-        fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x6, 
-            set_position_MyAct(motors.fold.tranmitbuf, DOWN_POSITION_DEG, FOLDING_MAX_SPEED_DPS), 8);
-    }else{
+    // if(gimbal_mode == GIM_FOLD){
+    //     fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x6, 
+    //         set_position_MyAct(motors.fold.tranmitbuf, DOWN_POSITION_DEG, FOLDING_MAX_SPEED_DPS), 8);
+    // }else{
         fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x6, 
             set_position_MyAct(motors.fold.tranmitbuf, NORMAL_POSITION_DEG, FOLDING_MAX_SPEED_DPS), 8);
-    }
+    // }
 
     const float is_fold_down = (fabsf(fmotor.fold.precise_position*RADtoDEG - DOWN_POSITION_DEG) < 10.0f);
 

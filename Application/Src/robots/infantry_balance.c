@@ -94,7 +94,7 @@ PID_t wheel_r_vel_calib_pit={
 
 // Legal leg length: 140mm to 330mm
 PID_t leftleg_length_pid={ // left side leg length
-    .P=1200.0f,
+    .P=500.0f, // 1200
     .I=0.0f,
     .D=30.0f,
     .integral_max=10.0f
@@ -102,13 +102,13 @@ PID_t leftleg_length_pid={ // left side leg length
 
 PID_t leftleg_dtheta_pid={ // left side leg angular velocity
     .P=12.0f,
-    .I=0.0f,
+    .I=100.0f,
     .D=0.0f,
-    .integral_max=1.0f
+    .integral_max=0.5f
 };
 
 PID_t rightleg_length_pid={ // right side leg length
-    .P=1200.0f,
+    .P=500.0f, // 1200
     .I=0.0f,
     .D=30.0f,
     .integral_max=10.0f
@@ -116,9 +116,9 @@ PID_t rightleg_length_pid={ // right side leg length
 
 PID_t rightleg_dtheta_pid={ // right side leg angular velocity
     .P=12.0f,
-    .I=0.0f,
+    .I=100.0f,
     .D=0.0f,
-    .integral_max=1.0f  
+    .integral_max=0.5f
 };
 
 PID_t gim_yaw_vel_pid={
@@ -179,7 +179,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
 
     // Modify here to disable leg function
-    // wbr_state = WBR_STANDBY;
+    wbr_state = WBR_STANDBY;
 
     // ----------------- Gimbal / Feeder control -----------------
     
@@ -209,12 +209,15 @@ void role_controller_step(const float CTRL_DELTA_T){
     // float gimbal_vel_enc_vel = (fmotor.joint_yaw.position - geo->gimbal_yaw_pos)*(1/CTRL_DELTA_T);
     // geo->gimbal_yaw_pos = fmotor.joint_yaw.position;
     geo->target_gim_yaw_vel = geo->input_yaw_vel + pid_cycle(&gim_yaw_pos_pid, wrap_to_pi(geo->target_gim_yaw_pos - geo->gimbal_yaw_pos), CTRL_DELTA_T);
-    
+
+
     float thry_target_motor_vel = geo->target_gim_yaw_vel;
 
     if(BTB_ONLINE){
         geo->T_yaw = friction_compensation(thry_target_motor_vel, 0.5f, (1/0.6f));
         geo->T_yaw += pid_cycle(&gim_yaw_vel_pid, geo->target_gim_yaw_vel - geo->gimbal_yaw_vel, CTRL_DELTA_T);
+    
+        geo->T_yaw = limit_val(geo->T_yaw, 4.0f);
     }else{
         geo->T_yaw = 0.0f;
     }
@@ -296,26 +299,33 @@ void role_controller_step(const float CTRL_DELTA_T){
     //     geo->target_gim_yaw_pos = 0.0f;
     // }
     const float input_mouse_alpha = 0.03f;
-    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*0.02f*input_mouse_alpha;
+    const float pitch_sensitivity_ratio = 0.02f;
+    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*(0.02f*input_mouse_alpha*pitch_sensitivity_ratio);
     geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*0.02f*input_mouse_alpha;
     
     // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.channel[1]*input_mouse_alpha;
     // geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + dr16.channel[0]*input_mouse_alpha;
     if(BTB_ONLINE && dr16.mouse.press_l){
-        geo->target_agi_vel = -12.0f;
+        if(dr16.s2 == DR16_SWITCH_MID){
+            geo->target_agi_vel = -1.0f;
+        }else{
+            geo->target_agi_vel = -12.0f;
+        }
     }else if(BTB_ONLINE && dr16.mouse.press_r){
         geo->target_agi_vel = 1.0f;
     }else{
         geo->target_agi_vel = 0.0f;
     }
 
-    b2g_B.flywheel_enabled = (dr16.s2 == DR16_SWITCH_UP);
+    b2g_B.flywheel_enabled = (dr16.s2 == DR16_SWITCH_UP || dr16.s2 == DR16_SWITCH_MID);
 
     if(wbr_state == WBR_CONST_VEL){
-        geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
+        // geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
+        geo->target_L_length = 0.33f;
         geo->target_L_leg_omega = 1.5f * dr16.channel[2];
-        geo->target_R_length = 0.22f + 0.08f*dr16.channel[3];
-        geo->target_R_leg_omega = 1.5f * dr16.channel[2];
+        // geo->target_R_length = 0.22f + 0.08f*dr16.channel[1];
+        geo->target_R_length = 0.33f;
+        geo->target_R_leg_omega = 1.5f * dr16.channel[0];
 
     }else if(wbr_state == WBR_LQR_PREP){
         geo->target_L_length = 0.19f;
@@ -349,12 +359,26 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     // ==================== Update Controllers =====================
 
-    if(wbr_state == WBR_CONST_VEL || wbr_state == WBR_LQR_PREP){
+    if(wbr_state == WBR_CONST_VEL){
+        if(HAL_GetTick()%2==0){ // Left side
+            // geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
+            geo->Fnl = 100.0f;
+            geo->Tbll = pid_cycle(&leftleg_dtheta_pid, wrap_to_pi(geo->target_L_leg_omega - geo->dth_ll_nb), CTRL_DELTA_T*2);
+        }else{ // Right side
+            // geo->Fnr = pid_cycle(&rightleg_length_pid, geo->target_R_length - geo->L_r, CTRL_DELTA_T*2);
+            geo->Fnr = 100.0f;
+            geo->Tblr = pid_cycle(&rightleg_dtheta_pid, wrap_to_pi(geo->target_R_leg_omega - geo->dth_lr_nb), CTRL_DELTA_T*2);
+        }
+        geo->Twl = pid_cycle(&wheel_l_vel_calib_pit, - fmotor.wheel_L.speed, CTRL_DELTA_T);
+        geo->Twr = pid_cycle(&wheel_r_vel_calib_pit, - fmotor.wheel_R.speed, CTRL_DELTA_T);
+    }else if(wbr_state == WBR_LQR_PREP){
         if(HAL_GetTick()%2==0){ // Left side
             geo->Fnl = pid_cycle(&leftleg_length_pid, geo->target_L_length - geo->L_l, CTRL_DELTA_T*2);
+            geo->Fnl = limit_val(geo->Fnl, 100.0f);
             geo->Tbll = pid_cycle(&leftleg_dtheta_pid, wrap_to_pi(geo->target_L_leg_omega - geo->dth_ll_nb), CTRL_DELTA_T*2);
         }else{ // Right side
             geo->Fnr = pid_cycle(&rightleg_length_pid, geo->target_R_length - geo->L_r, CTRL_DELTA_T*2);
+            geo->Fnr = limit_val(geo->Fnr, 100.0f);
             geo->Tblr = pid_cycle(&rightleg_dtheta_pid, wrap_to_pi(geo->target_R_leg_omega - geo->dth_lr_nb), CTRL_DELTA_T*2);
         }
         geo->Twl = pid_cycle(&wheel_l_vel_calib_pit, - fmotor.wheel_L.speed, CTRL_DELTA_T);
@@ -466,7 +490,7 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    geo->T_yaw = 0.0f;
+    // geo->T_yaw = 0.0f;
     fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
 
     // Implement board-to-board communication
