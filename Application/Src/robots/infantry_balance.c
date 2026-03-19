@@ -122,7 +122,7 @@ PID_t rightleg_dtheta_pid={ // right side leg angular velocity
 };
 
 PID_t gim_yaw_vel_pid={
-    .P=2.5f,
+    .P=2.0f,
     .I=30.0f,
     .D=0.0f,
     .integral_max=0.05f
@@ -309,7 +309,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         }
         
     }else if(BTB_ONLINE && dr16.mouse.press_r){
-        geo->target_agi_vel = -1.0f;
+        geo->target_agi_vel = 1.0f;
     }else{
         geo->target_agi_vel = 0.0f;
     }
@@ -471,7 +471,8 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    // geo->T_yaw = 0.0f;
+    // geo->T_yaw = limit_val(geo->T_yaw, 5.0f);
+    geo->T_yaw = 0.0f;
     fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
 
     // Implement board-to-board communication

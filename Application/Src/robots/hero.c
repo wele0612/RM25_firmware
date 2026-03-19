@@ -207,8 +207,10 @@ void role_controller_step(const float CTRL_DELTA_T){
         control_sensitivity = 0.005f;
     }else{
         control_sensitivity = 0.02f;
-    }
-    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*control_sensitivity*input_mouse_alpha;
+    }   
+
+    const float reduced_pitch_sensitivity_ratio = 0.01f;
+    geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*control_sensitivity*input_mouse_alpha*reduced_pitch_sensitivity_ratio;
     geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*control_sensitivity*input_mouse_alpha;
 
     
@@ -698,8 +700,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->input_pitch_vel = b2g_B.target_pitch_vel*3E-4;
 
     float predict_yaw, predict_pitch, predict_vyaw, predict_vpitch, predict_distence;
-    int vision_tracked = vision_get_armorplate(&predict_yaw, &predict_pitch, 
-        &predict_vyaw, &predict_vpitch, &predict_distence, 10.0f);
+    // int vision_tracked = vision_get_armorplate(&predict_yaw, &predict_pitch, 
+    //     &predict_vyaw, &predict_vpitch, &predict_distence, 200.0f);
+
+    int vision_tracked = vision_get_body(&predict_yaw, &predict_pitch, 
+        &predict_vyaw, &predict_vpitch, &predict_distence, 200.0f);
 
     uint8_t gimbal_mode = b2g_B.gimbal_mode;
 
