@@ -179,7 +179,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
 
     // Modify here to disable leg function
-    // wbr_state = WBR_STANDBY;
+    wbr_state = WBR_STANDBY;
 
     // ----------------- Gimbal / Feeder control -----------------
     
@@ -302,14 +302,19 @@ void role_controller_step(const float CTRL_DELTA_T){
     // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.channel[1]*input_mouse_alpha;
     // geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + dr16.channel[0]*input_mouse_alpha;
     if(BTB_ONLINE && dr16.mouse.press_l){
-        geo->target_agi_vel = -12.0f;
+        if(dr16.s2 == DR16_SWITCH_UP){
+            geo->target_agi_vel = -12.0f;
+        }else if(dr16.s2 == DR16_SWITCH_MID){
+            geo->target_agi_vel = -3.0f;
+        }
+        
     }else if(BTB_ONLINE && dr16.mouse.press_r){
-        geo->target_agi_vel = 1.0f;
+        geo->target_agi_vel = -1.0f;
     }else{
         geo->target_agi_vel = 0.0f;
     }
 
-    b2g_B.flywheel_enabled = (dr16.s2 == DR16_SWITCH_UP);
+    b2g_B.flywheel_enabled = (dr16.s2 == DR16_SWITCH_UP || dr16.s2 == DR16_SWITCH_MID);
 
     if(wbr_state == WBR_CONST_VEL){
         geo->target_L_length = 0.22f + 0.08f*dr16.channel[3];
@@ -466,7 +471,7 @@ void role_controller_step(const float CTRL_DELTA_T){
             0.0f),
         8);
 
-    geo->T_yaw = 0.0f;
+    // geo->T_yaw = 0.0f;
     fdcanx_send_data(&hfdcan3, JOINT_YAW_CTRLID, set_torque_DM4310(motors.joint_yaw.tranmitbuf, geo->T_yaw), 8);
 
     // Implement board-to-board communication
