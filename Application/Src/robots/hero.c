@@ -168,6 +168,8 @@ void role_controller_step(const float CTRL_DELTA_T){
         accelerate_factor = 2.5f;
     }
 
+    #ifdef HERO_BASE_USE_KEYBOARD
+
     if(dr16.key.v & DR16_KEY_W_BIT){
         geo->target_vy = accelerate_factor*1.6f;
     }else if(dr16.key.v & DR16_KEY_S_BIT){
@@ -191,12 +193,15 @@ void role_controller_step(const float CTRL_DELTA_T){
     }else{
         geo->target_vyaw = 0.0f;
     }
+    #else
+
+    geo->target_vx = dr16.channel[0]*2.0f;
+    geo->target_vy = dr16.channel[1]*2.0f;
+    geo->target_vyaw = -dr16.channel[2]*3.0f;
+
+    #endif
 
     int enable_auto_aim = dr16.mouse.press_r;
-
-    // geo->target_vx = dr16.channel[0]*5.0f;
-    // geo->target_vy = dr16.channel[1]*5.0f;
-    // geo->target_vyaw = -dr16.channel[2]*8.0f;
 
     // geo->input_yaw_vel = dr16.channel[2]*1.0f;
     // geo->input_pitch_vel = dr16.channel[3]*1.0f;
