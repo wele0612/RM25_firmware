@@ -307,9 +307,21 @@
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
-            float target_speed_x;
-            float target_speed_y;
-            float target_omega_yaw;
+            float vx;
+            float vy;
+            float vx_b;
+            float vy_b;
+            float vyaw;
+
+            float yaw_offset;
+
+            float target_vx;
+            float target_vy;
+            float target_vyaw;
+
+            float target_vx_b;
+            float target_vy_b;
+
         }robot_ctrl_t;
     #endif
 #endif
