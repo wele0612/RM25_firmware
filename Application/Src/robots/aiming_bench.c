@@ -61,7 +61,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     } 
     
     if (dr16.s1 == DR16_SWITCH_MID) { // 8Hz 
-        geo->target_agi_omega = 2.0f*PI;
+        geo->target_agi_omega = - 2.0f*PI;
     } else {
         geo->target_agi_omega = 0.0f;
     }
