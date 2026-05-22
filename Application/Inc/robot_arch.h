@@ -303,6 +303,7 @@
             report_M3508_t wheel_LB;
             report_M3508_t wheel_RF;
             report_M3508_t wheel_RB;
+            report_M2006_t agi;
 
         }robot_motors_t;
 
@@ -314,6 +315,7 @@
             float vyaw;
 
             float yaw_offset;
+            float agi_omega;
 
             float target_vx;
             float target_vy;
@@ -321,6 +323,8 @@
 
             float target_vx_b;
             float target_vy_b;
+
+            float target_agi_omega;
 
         }robot_ctrl_t;
     #endif

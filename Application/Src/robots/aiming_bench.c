@@ -28,6 +28,13 @@ PID_t vyaw_pid={
     .D = 0.0f,
 };
 
+PID_t agi_omega_pid={
+    .P = 1.1f,
+    .I = 0.0f,
+    .D = 0.0f,
+    .integral_max = 0.1f
+};
+
 // only used for aiming bench 
 static float powermeter_voltage = 0.0f;
 static float powermeter_current = 0.0f;
@@ -51,7 +58,15 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->yaw_offset = imu_data.yaw;
     }else if(dr16.s2 == DR16_SWITCH_MID){
         geo->target_vyaw = 0.5f*2.0f*PI;
+    } 
+    
+    if (dr16.s1 == DR16_SWITCH_MID) { // 8Hz 
+        geo->target_agi_omega = 2.0f*PI;
+    } else {
+        geo->target_agi_omega = 0.0f;
     }
+
+    // geo->target_agi_omega = 2.0f*PI;
 
     const float WHEEL_RADIUS = 0.154f * 0.5f;
     const float RPM_TO_MS = RPMtoRADS*WHEEL_RADIUS*M3508_GEAR_RATIO;
@@ -59,10 +74,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float v_alpha = 0.3f;
     float vy = (RPM_TO_MS*0.25f)*(motors.wheel_LF.speed + motors.wheel_LB.speed - motors.wheel_RF.speed - motors.wheel_RB.speed);
     float vx = (RPM_TO_MS*0.25f)*(motors.wheel_LF.speed - motors.wheel_LB.speed + motors.wheel_RF.speed - motors.wheel_RB.speed);
-    
+
     geo->vy_b = vy*v_alpha + geo->vy_b*(1.0f - v_alpha);
     geo->vx_b = vx*v_alpha + geo->vx_b*(1.0f - v_alpha);
     geo->vyaw = imu_data.gyro[2]*DEGtoRAD;
+    geo->agi_omega = motors.agi.speed * RPMtoRADS; // update agi omega
 
     const float body_yaw_offset = imu_data.yaw - geo->yaw_offset;
     const float cosby = cosf(body_yaw_offset);
@@ -76,6 +92,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     float F_y = pid_cycle(&vy_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
     float F_x = pid_cycle(&vx_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
     float T_yaw = pid_cycle(&vyaw_pid, geo->target_vyaw - geo->vyaw, CTRL_DELTA_T);
+    float T_agi = pid_cycle(&agi_omega_pid, geo->target_agi_omega - geo->agi_omega * M2006_GEAR_RATIO, CTRL_DELTA_T);
 
     float F_x_b = F_x * cosby + F_y * sinby;
     float F_y_b = F_x * -sinby + F_y * cosby;
@@ -94,6 +111,13 @@ void role_controller_step(const float CTRL_DELTA_T){
         T_RB*(1.0f/M3508_TORQUE_CONSTANT)
     ), 8);
 
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID5_8, set_current_M3508(tx_buffer,  
+        T_agi*(1.0f/M2006_TORQUE_CONSTANT),
+        0.0f,
+        0.0f,
+        0.0f
+    ), 8);
+
     vofa.val[0]=imu_data.yaw;
     vofa.val[1]=imu_data.pitch;
     vofa.val[2]=imu_data.gyro[2];
@@ -105,9 +129,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[4] = powermeter_voltage;
     vofa.val[5] = powermeter_current;
     vofa.val[6] = powermeter_current * powermeter_voltage; // power
-    vofa.val[7]=dr16.channel[3];
+    vofa.val[7] = geo->target_agi_omega;
 
-    vofa.val[8]=(float)robot_config.test_val;
+    vofa.val[8] = geo->agi_omega * M2006_GEAR_RATIO;
     vofa.val[9]=robot_config.imu_gyro_offset[2];
 
     // vofa.val[8]=(float)dr16.s1;
@@ -132,6 +156,10 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
 
     case 0x204:
         parse_feedback_M3508(msg, &motors.wheel_RB);
+        break;
+
+    case 0x205:
+        parse_feedback_M3508(msg, &motors.agi);
         break;
 
     // here used for powermeter
