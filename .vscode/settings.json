@@ -55,5 +55,11 @@
         "config.h": "c",
         "global_variables.h": "c"
     },
-    "ros.distro": "kilted"
+    "ros.distro": "kilted",
+    "github.copilot.enable": {
+    "*": false,
+    "plaintext": false,
+    "markdown": false,
+    "scminput": false
+  }
 }

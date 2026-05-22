@@ -28,6 +28,10 @@ PID_t vyaw_pid={
     .D = 0.0f,
 };
 
+// only used for aiming bench 
+static float powermeter_voltage = 0.0f;
+static float powermeter_current = 0.0f;
+
 void role_controller_init(){
 
 }
@@ -95,9 +99,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[2]=imu_data.gyro[2];
     vofa.val[3]=imu_data.gyro[1];
 
-    vofa.val[4]=geo->vy;
-    vofa.val[5]=geo->vx;
-    vofa.val[6]=geo->vyaw;
+    // vofa.val[4]=geo->vy;
+    // vofa.val[5]=geo->vx;
+    // vofa.val[6]=geo->vyaw;
+    vofa.val[4] = powermeter_voltage;
+    vofa.val[5] = powermeter_current;
+    vofa.val[6] = powermeter_current * powermeter_voltage; // power
     vofa.val[7]=dr16.channel[3];
 
     vofa.val[8]=(float)robot_config.test_val;
@@ -126,6 +133,13 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case 0x204:
         parse_feedback_M3508(msg, &motors.wheel_RB);
         break;
+
+    // here used for powermeter
+    case 0x391:
+        // handle for voltage
+        memcpy(&powermeter_voltage, msg + 0, sizeof(float));
+        // handle for current
+        memcpy(&powermeter_current, msg + 4, sizeof(float));
 
     default:
         break;
