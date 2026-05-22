@@ -140,6 +140,7 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         memcpy(&powermeter_voltage, msg + 0, sizeof(float));
         // handle for current
         memcpy(&powermeter_current, msg + 4, sizeof(float));
+        break;
 
     default:
         break;
