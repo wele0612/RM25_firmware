@@ -6,24 +6,26 @@
 #include<global_variables.h>
 #include<stdlib.h>
 
+#include<chasis_power.h>
+
 #include<h7can.h>
 
 #ifdef CONFIG_PLATFORM_BASE
 
 PID_t vy_pid={
-    .P = 6.0f,
+    .P = 4.0f,
     .I = 0.0f,
     .D = 0.0f,
 };
 
 PID_t vx_pid={
-    .P = 6.0f,
+    .P = 4.0f,
     .I = 0.0f,
     .D = 0.0f,
 };
 
 PID_t vyaw_pid={
-    .P = 1.5f,
+    .P = 1.2f,
     .I = 0.0f,
     .D = 0.0f,
 };
@@ -49,16 +51,18 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     robot_ctrl_t *geo = &robot_geo;
 
-    geo->target_vy = dr16.channel[1]*1.2f;
-    geo->target_vx = dr16.channel[0]*1.2f;
+    geo->target_vy = dr16.channel[1]*3.0f;
+    geo->target_vx = dr16.channel[0]*3.0f;
     // geo->target_vyaw = dr16.channel[2]*2.0f;
 
-    if(dr16.s2 == DR16_SWITCH_DOWN){
+    if(dr16.s2 == DR16_SWITCH_MID){
+        geo->target_vyaw = 0.5f*2.0f*PI;
+    }else if(dr16.s2 == DR16_SWITCH_UP){
+        geo->target_vyaw = 1.2f*2.0f*PI;
+    }else{
         geo->target_vyaw = -dr16.channel[2]*1.0f;
         geo->yaw_offset = imu_data.yaw;
-    }else if(dr16.s2 == DR16_SWITCH_MID){
-        geo->target_vyaw = 0.5f*2.0f*PI;
-    } 
+    }
     
     if (dr16.s1 == DR16_SWITCH_MID) { // 8Hz 
         geo->target_agi_omega = - 2.0f*PI;
@@ -118,21 +122,27 @@ void role_controller_step(const float CTRL_DELTA_T){
         0.0f
     ), 8);
 
+    float estimated_total_power = 0.0f;
+    estimated_total_power += m3508_estimate_power(motors.wheel_LF.current, motors.wheel_LF.speed*RPMtoRADS);
+    estimated_total_power += m3508_estimate_power(motors.wheel_LB.current, motors.wheel_LB.speed*RPMtoRADS);
+    estimated_total_power += m3508_estimate_power(motors.wheel_RF.current, motors.wheel_RF.speed*RPMtoRADS);
+    estimated_total_power += m3508_estimate_power(motors.wheel_RB.current, motors.wheel_RB.speed*RPMtoRADS);
+    
     vofa.val[0]=imu_data.yaw;
     vofa.val[1]=imu_data.pitch;
-    vofa.val[2]=imu_data.gyro[2];
-    vofa.val[3]=imu_data.gyro[1];
+    vofa.val[2]=motors.wheel_RF.current;
+    vofa.val[3]=motors.wheel_RF.speed*RPMtoRADS;
 
     // vofa.val[4]=geo->vy;
     // vofa.val[5]=geo->vx;
     // vofa.val[6]=geo->vyaw;
     vofa.val[4] = powermeter_voltage;
     vofa.val[5] = powermeter_current;
-    vofa.val[6] = powermeter_current * powermeter_voltage; // power
+    vofa.val[6] = powermeter_current * powermeter_voltage - 1.2f; // power
     vofa.val[7] = geo->target_agi_omega;
 
     vofa.val[8] = geo->agi_omega * M2006_GEAR_RATIO;
-    vofa.val[9]=robot_config.imu_gyro_offset[2];
+    vofa.val[9] = estimated_total_power;
 
     // vofa.val[8]=(float)dr16.s1;
     // vofa.val[9]=(float)dr16.s2;
