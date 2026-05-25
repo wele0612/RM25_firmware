@@ -19,7 +19,7 @@ typedef struct robot_VOFA_report_t{
 }robot_VOFA_report_t;
 __GLOBAL_VAR robot_VOFA_report_t vofa;
 
-#define REMOTE_TIMEOUT (50U)
+#define REMOTE_TIMEOUT (100U)
 typedef struct timeout_monitor_t{
     uint64_t last_remote_tick;
 }timeout_monitor_t;

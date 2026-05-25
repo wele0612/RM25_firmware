@@ -28,6 +28,7 @@
     OSPI_W25Qxx_ReadBuffer((uint8_t*)(config),ROBOT_CONFIG_ROM_ADDR,sizeof(Robot_config_t));\
 }while(0)
 
+int remote_online();
 
 void robot_init();
 void referee_ui_update(int updata_level);

@@ -1,7 +1,6 @@
 #include <receiver.h>
 #include <stdint.h>
 
-
 void parse_DR16_receiver_msg(receiver_DBUS_t* dr16, uint8_t* msg){
     const uint8_t* buff = msg;
     uint16_t ch0 = (buff[0] | buff[1] << 8) & 0x07FF;
@@ -31,21 +30,20 @@ void parse_DR16_receiver_msg(receiver_DBUS_t* dr16, uint8_t* msg){
     dr16->mouse.press_l = buff[12];
     dr16->mouse.press_r = buff[13];
     dr16->key.v = ((uint16_t)buff[14]) | ((uint16_t)buff[15] << 8);
-
 }
 
 void set_DR16_previous_state(receiver_DBUS_t *dr16){
     memcpy(&(dr16->previous), dr16, sizeof(dr16->previous));
 }
 
-void parse_aiming_receiver_msg(Aiming_message_t *aim) {
-    const uint8_t* buff = aim->msg;
+// void parse_aiming_receiver_msg(Aiming_message_t *aim) {
+//     const uint8_t* buff = aim->msg;
 
-    const float* asfloat = (const float *)buff;
+//     const float* asfloat = (const float *)buff;
 
-    aim->target_yaw_rad = asfloat[0];
-    aim->target_pitch_rad = asfloat[1];
-    aim->target_distance_m = asfloat[2];
+//     aim->target_yaw_rad = asfloat[0];
+//     aim->target_pitch_rad = asfloat[1];
+//     aim->target_distance_m = asfloat[2];
 
-    return;
-}
+//     return;
+// }

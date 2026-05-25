@@ -11,6 +11,7 @@ RAM_D2_SECTION uint8_t vision_ToRos_buf[VISION_TO_ROS_SIZE];
 
 void controller_init(){
     role_controller_init();
+    ESTOP_reset();
 }
 
 void controller_cycle(const float CTRL_DELTA_T){

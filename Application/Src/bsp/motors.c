@@ -11,6 +11,21 @@
 
 #include <string.h>
 
+static int MOTOR_ESTOP = 1;
+
+// ESTOP: will set all motors to 0 torque
+void ESTOP(){
+    MOTOR_ESTOP = 1;
+}
+
+void ESTOP_reset(){
+    MOTOR_ESTOP = 0;
+}
+
+int ESTOP_get_state(){
+    return MOTOR_ESTOP;
+}
+
 // CRC 算法：CRC-8/MAXIM
 // 多项式：x8 + x5 + x4 + 1
 uint8_t calc_crc8(void *data, size_t size) {
@@ -70,6 +85,13 @@ uint8_t* set_current_M3508(uint8_t *buf, \
     m2_current = fmaxf(-MAX_CURRENT, fminf(m2_current, MAX_CURRENT));
     m3_current = fmaxf(-MAX_CURRENT, fminf(m3_current, MAX_CURRENT));
     m4_current = fmaxf(-MAX_CURRENT, fminf(m4_current, MAX_CURRENT));
+
+    if(MOTOR_ESTOP){
+        m1_current = 0.0f;
+        m2_current = 0.0f;
+        m3_current = 0.0f;
+        m4_current = 0.0f;
+    }
 
     const float m3508_current_to_int = (16384.0f/20.0f);
       
@@ -145,8 +167,13 @@ static uint8_t *set_MIT_DM_joint(uint8_t *buf, float position,
 
     position = constrain(position, P_MIN, P_MAX);
     velocity = constrain(velocity, V_MIN, V_MAX);
-    torque = constrain(torque, -T_MAX, T_MAX);
-
+    
+    if(MOTOR_ESTOP){
+        torque = 0.0f;
+    }else{
+        torque = constrain(torque, -T_MAX, T_MAX);
+    }
+    
     uint16_t pos_tmp,vel_tmp,kp_tmp,kd_tmp,tor_tmp;
     pos_tmp = dm_float_to_uint(position, P_MIN, P_MAX, 16);
     vel_tmp = dm_float_to_uint(velocity, V_MIN, V_MAX, 12);
@@ -223,6 +250,11 @@ uint8_t* set_mode_M0603A(uint8_t *buf, uint8_t id, uint8_t mode){
 uint8_t* set_current_M0603A(uint8_t* buf, uint8_t id, float current){
     if(current > 3.9f) current = 3.9f;
     if(current < -3.9f) current = -3.9f;
+
+    if(MOTOR_ESTOP){
+        current = 0.0f;
+    }
+
     const int16_t current_i16 = (int16_t)(current*(32767/4.0f));
     // const int16_t current_i16 = 0x0bb8;
 
@@ -338,6 +370,13 @@ uint8_t* set_heartbeat_timeout_P1010B(uint8_t *buf, uint8_t id, int16_t time_ms)
 }
 uint8_t* set_torque_P1010B(uint8_t *buf, \
     float m1_torque, float m2_torque, float m3_torque, float m4_torque){
+
+    if(MOTOR_ESTOP){
+        m1_torque = 0.0f;
+        m2_torque = 0.0f;
+        m3_torque = 0.0f;
+        m4_torque = 0.0f;
+    }
       
     uint16_t m1_current = (int16_t)(m1_torque/P1010B_TORQUE_CONSTANT*100);
     buf[0] = m1_current >> 8;
@@ -386,6 +425,13 @@ uint8_t* set_torque_M1505B(uint8_t *buf, \
     float m1_torque, float m2_torque, float m3_torque, float m4_torque){
 
     const float conversion = (32767.0f/55.0f)/M1505B_TORQUE_CONSTANT;
+
+    if(MOTOR_ESTOP){
+        m1_torque = 0.0f;
+        m2_torque = 0.0f;
+        m3_torque = 0.0f;
+        m4_torque = 0.0f;
+    }
 
     uint16_t m1_current = (int16_t)(m1_torque*conversion);
     buf[0] = m1_current >> 8;
@@ -466,6 +512,11 @@ uint8_t *set_speed_MyAct(uint8_t *msg, float speed, uint8_t max_torque){
     }
     int32_t speedControl = (int32_t)(speed*100.0f);
 
+    if(MOTOR_ESTOP){
+        speed = 0.0f;
+        max_torque = 1;
+    }
+
     msg[0]=MYACT_CMD_SPEED_LOOP;
     msg[1]=max_torque;
     msg[2]=0x00;
@@ -481,6 +532,10 @@ static inline uint8_t *set_current_MyAct(uint8_t *msg, float current){
         current = 327.00f;
     }else if(current < -327.00f){
         current = -327.00f;
+    }
+
+    if(MOTOR_ESTOP){
+        current = 0.0f;
     }
     
     int16_t iqControl=(int16_t)(current*100.0f);

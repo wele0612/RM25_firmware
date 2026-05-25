@@ -18,6 +18,9 @@
 #define M2006_GEAR_RATIO	(1.0f/36.0f)
 // M2006 also use this driver.
 
+void ESTOP();
+void ESTOP_reset();
+
 typedef struct report_M3508_t
 {
 	float speed;

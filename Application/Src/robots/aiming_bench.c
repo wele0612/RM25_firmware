@@ -65,7 +65,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
     
     if (dr16.s1 == DR16_SWITCH_MID) { // 8Hz 
-        geo->target_agi_omega = - 2.0f*PI;
+        geo->target_agi_omega = - 2.5f*2.0f*PI;
     } else {
         geo->target_agi_omega = 0.0f;
     }
@@ -139,7 +139,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[4] = powermeter_voltage;
     vofa.val[5] = powermeter_current;
     vofa.val[6] = powermeter_current * powermeter_voltage - 1.2f; // power
-    vofa.val[7] = geo->target_agi_omega;
+    vofa.val[7] = dr16.channel[1];
 
     vofa.val[8] = geo->agi_omega * M2006_GEAR_RATIO;
     vofa.val[9] = estimated_total_power;

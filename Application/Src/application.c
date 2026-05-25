@@ -41,6 +41,10 @@ static void self_test(){
     // }
 }
 
+int remote_online(){
+    return (HAL_GetTick() - timeout.last_remote_tick) < REMOTE_TIMEOUT;
+}
+
 void robot_init(){
     imu_state=IMU_RESET;
 
