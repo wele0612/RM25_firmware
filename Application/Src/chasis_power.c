@@ -2,6 +2,13 @@
 
 // In SI unit; torque current=A, speed=rad/s (rotor)
 
+// W = K0
+//   + K1 * current
+//   + K2 * speed
+//   + K3 * current * speed
+//   + K4 * current * current
+//   + K5 * speed * speed
+
 const float M3508_POLYMODEL[]={
     2.1599749,   // K0
     0.0015595104,   // K1
