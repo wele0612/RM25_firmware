@@ -6,3 +6,5 @@
 #endif
 
 float m3508_estimate_power(float current, float omega);
+
+float m3508_quadwheel_get_scaling(float currents[], const float omegas[], const float target_power);
