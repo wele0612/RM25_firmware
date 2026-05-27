@@ -12,6 +12,7 @@ typedef struct imu_data_t{
     float yaw; // rad, within (-π, π)
     float pitch; // rad
     float roll; // rad
+    float q[4]; // four quaternions
 }imu_data_t;
 
 

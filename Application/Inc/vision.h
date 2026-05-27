@@ -13,23 +13,21 @@
  */
 typedef struct __attribute__((packed)) {
     uint8_t header;              // 帧头: 固定 0x5A
+
+    uint8_t mode;  // 0: 空闲, 1: 自瞄, 2: 小符, 3: 大符
+    float q[4];    // wxyz顺序 四元数
+
+    float yaw;
+    float yaw_vel;
+
+    float pitch;
+    float pitch_vel;
     
-    // 控制字节位域 (共8位)
-    uint8_t detect_color : 1;    // 机器人颜色: 0=红色方, 1=蓝色方 (视觉根据此切换识别目标)
-    uint8_t reset_tracker : 1;   // 重置追踪器: 1=请求视觉节点重置EKF和追踪状态
-    uint8_t reserved : 6;        // 保留位，置0
-    
-    // 云台姿态 (弧度，遵循REP-103标准: roll右倾为正, pitch抬头为正, yaw逆时针为正)
-    float roll;                  // 横滚角 [rad]
-    float pitch;                 // 俯仰角 [rad] 
-    float yaw;                   // 偏航角 [rad] (相对于odom坐标系)
-    
-    // 当前瞄准点坐标 (用于RViz可视化，单位:米)
-    float aim_x;                 // 瞄准点X [m]
-    float aim_y;                 // 瞄准点Y [m]
-    float aim_z;                 // 瞄准点Z [m]
-    
-    uint16_t checksum;           // CRC16校验码 (低字节在前，小端序)
+    float bullet_speed;
+    uint16_t bullet_count;  // 子弹累计发送次数
+
+    uint16_t crc16;
+
 } McuToRosPacket_t;
 
 #define VISION_TO_ROS_SIZE (sizeof(McuToRosPacket_t))

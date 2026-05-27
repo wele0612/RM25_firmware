@@ -170,7 +170,7 @@ PID_t pitch_pos_pid={
 // 0x0F is CAN(Slave) and 0x00 is Master
 void role_controller_init(){
     HAL_Delay(1000);
-    fdcanx_send_data(&hfdcan3, 0x0F, enable_DM4310(motors.pitch.tranmitbuf), 8);
+    // fdcanx_send_data(&hfdcan3, 0x0F, enable_DM4310(motors.pitch.tranmitbuf), 8);
 }
 
 void role_controller_step(const float CTRL_DELTA_T){

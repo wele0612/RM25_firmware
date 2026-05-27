@@ -48,7 +48,7 @@ void vision_recv_byte(uint8_t data){
 uint8_t* vision_send_pack(McuToRosData_t* toRos){
     toRos->packet.header = 0x5A; // Be careful! MCU to ROS use different header.
     uint16_t crc16 = Get_CRC16_Check_Sum(toRos->buffer, VISION_TO_ROS_SIZE-2, CRC16_INIT);
-    toRos->packet.checksum = crc16;
+    toRos->packet.crc16 = crc16;
     return toRos->buffer;
 }
 

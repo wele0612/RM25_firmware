@@ -700,10 +700,19 @@ int imu_update_ahrs(imu_data_t* imu, imu_data_t* imu_clean, float SAMPLE_PERIOD)
     imu->yaw = ahrs.yaw;
     imu->pitch = ahrs.pitch;
     imu->roll = ahrs.roll;
+    imu->q[0] = ahrs.q[0];
+    imu->q[1] = ahrs.q[1];
+    imu->q[2] = ahrs.q[2];
+    imu->q[3] = ahrs.q[3];
 
     imu_clean->pitch = imu->pitch;
     imu_clean->yaw = imu->yaw;
     imu_clean->roll = imu->roll;
+    imu_clean->q[0] = imu->q[0];
+    imu_clean->q[1] = imu->q[1];
+    imu_clean->q[2] = imu->q[2];
+    imu_clean->q[3] = imu->q[3];
+
 
     return 0;
 }

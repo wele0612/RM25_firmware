@@ -255,7 +255,7 @@ void robot_step(const float CTRL_DELTA_T){
 
     controller_cycle(CTRL_DELTA_T);
 
-    HAL_UART_Transmit_DMA(&huart7, (void *)&vofa, sizeof(vofa));
+    // HAL_UART_Transmit_DMA(&huart7, (void *)&vofa, sizeof(vofa));
 
     //HAL_UART_Transmit_IT(&huart7, (void *)&(vofa), sizeof(vofa));
     //HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
