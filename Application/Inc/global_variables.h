@@ -45,6 +45,11 @@ __GLOBAL_VAR uint8_t referee_buf[8];
 
 #define AIMING_UART &huart10
 __GLOBAL_VAR uint8_t vision_uart_buf[8];
+
+#include <ctrl_input.h>
+__GLOBAL_VAR chasis_ctrl_input_t chasis_ctrl;
+__GLOBAL_VAR gimbal_ctrl_input_t gimbal_ctrl;
+
 #ifdef CONFIG_PLATFORM_GIMBAL
 #include<vision.h>
 
