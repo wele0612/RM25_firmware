@@ -9,7 +9,7 @@
 typedef struct __attribute__((packed)){
     int16_t robot_forward_v; // 1e-3 m/(s*LSB)
     int16_t robot_leftward_v; // 1e-3 m/(s*LSB)
-    int16_t robot_yaw_omega; // 1e-4 RAD/LSB
+    int16_t robot_yaw_omega; // 1e-3 RAD/LSB
 
     uint8_t supercap_discharge : 1; // Accelerate beyond power limit
     uint8_t spintop_level : 2; // Spintop speed = x*PI rad/s
@@ -27,11 +27,17 @@ typedef struct __attribute__((packed)){
     int16_t gimbal_mouse_yaw_omega; // 1e-4 RAD/LSB
     int16_t gimbal_mouse_pitch_omega; // 1e-4 RAD/LSB
 
-    uint16_t feedback_shoot_speed; // Projectile speed from referee system
+    // Projectile speed from referee system, 1e-3 m/(s*LSB)
+    int16_t feedback_shoot_speed; 
 
+    // 0: Disable  1: Mouse  2: Auto-aim  3: Sentry
     uint8_t gimbal_control_mode : 2; 
-    // 0: Disable  1: User-mouse  2: Auto-aim  3: Sentry
-    uint8_t RSVD0 : 6; 
+
+    uint8_t gimbal_use_VTM_not_dr16 : 1;
+    
+    uint8_t swap_head_tail : 1; // Turn 180 deg to escape
+    uint8_t flywheel_enabled : 1; // Flywheel
+    uint8_t RSVD0 : 3; 
 
     uint8_t RSVD1;
 

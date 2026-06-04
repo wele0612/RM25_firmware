@@ -3,6 +3,8 @@
 
 #include<vision.h>
 #include<global_variables.h>
+#include<btb.h>
+#include<fdcan.h>
 
 #include<buzzer.h>
 #ifdef CONFIG_PLATFORM_GIMBAL
@@ -62,6 +64,12 @@ void controller_cycle(const float CTRL_DELTA_T){
         }
     }
     
+    g2b_A.gimbal_request_T_yaw = (int16_t)(0.0f * 1e3);
+    fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
+
+    // Upload chasis control commands
+    memcpy(&g2b_B.chasis_ctrl, &chasis_ctrl, sizeof(chasis_ctrl_input_t));
+    fdcanx_send_data(&hfdcan1, G2B_MSG_B_ID, (uint8_t *)&g2b_B, 8);
 }
 
 __weak void dr16_on_change(){}
