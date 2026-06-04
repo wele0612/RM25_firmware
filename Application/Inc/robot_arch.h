@@ -246,6 +246,10 @@
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
+            float measured_voltage;
+            float measured_current;
+            float measured_power;
+
             float vx_b;
             float vy_b;
             float vyaw_gyro;

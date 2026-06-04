@@ -7,6 +7,8 @@
 
 #include<vision.h>
 
+#include<chasis_power.h>
+
 #include<motors.h>
 #include<servo_pwm.h>
 #include<btb.h>
@@ -79,16 +81,16 @@ void dr16_on_change(){
 
 PID_t body_x_vel_pid={
     .P = 12.0f,
-    .I = 0.0f,
+    .I = 10.0f,
     .D = 0.0f,
-    .integral_max = 0.1f
+    .integral_max = 0.05f
 };
 
 PID_t body_y_vel_pid={
     .P = 12.0f,
-    .I = 0.0f,
+    .I = 10.0f,
     .D = 0.0f,
-    .integral_max = 0.1f
+    .integral_max = 0.05f
 };
 
 PID_t body_yaw_vel_pid={
@@ -168,6 +170,10 @@ void role_controller_step(const float CTRL_DELTA_T){
         accelerate_factor = 2.5f;
     }
 
+    float m_power = geo->measured_current*geo->measured_voltage;
+    const float power_alpha = 0.2f;
+    geo->measured_power = power_alpha*m_power + (1.0f-power_alpha)*geo->measured_power;
+
     #ifdef HERO_BASE_USE_KEYBOARD
 
     if(dr16.key.v & DR16_KEY_W_BIT){
@@ -195,9 +201,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
     #else
 
-    geo->target_vx = dr16.channel[0]*2.0f;
-    geo->target_vy = dr16.channel[1]*2.0f;
-    geo->target_vyaw = -dr16.channel[2]*3.0f;
+    geo->target_vx = dr16.channel[0]*3.0f;
+    geo->target_vy = dr16.channel[1]*3.0f;
+    geo->target_vyaw = -dr16.channel[2]*12.0f;
 
     #endif
 
@@ -459,12 +465,29 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->T_RF = (-geo->F_y_b + geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
     geo->T_RB = (-geo->F_y_b - geo->F_x_b)*force_vector_coe + T_single_wheel_turn;
 
-    uint8_t tx_buf[8];
-    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buf,
+    float chasis_currents[4] = {
         geo->T_LF*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
         geo->T_LB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
         geo->T_RF*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB),
-        geo->T_RB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB)), 8);
+        geo->T_RB*(-1.0f/M3508_TORQUE_CONSTANT_CUSTOM_GB)
+    };
+
+    float chasis_omegas[4] = {
+        motors.wheel_LF.speed*RPMtoRADS,
+        motors.wheel_LB.speed*RPMtoRADS,
+        motors.wheel_RF.speed*RPMtoRADS,
+        motors.wheel_RB.speed*RPMtoRADS
+    };
+
+    float chasis_current_scaling = m3508_quadwheel_get_scaling(
+        chasis_currents, chasis_omegas, 50.0f);
+
+    uint8_t tx_buf[8];
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buf,
+        chasis_currents[0]*chasis_current_scaling,
+        chasis_currents[1]*chasis_current_scaling,
+        chasis_currents[2]*chasis_current_scaling,
+        chasis_currents[3]*chasis_current_scaling), 8);
 
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, set_torque_DM4310(motors.yaw.tranmitbuf, geo->T_yaw), 8);
 
@@ -479,22 +502,34 @@ void role_controller_step(const float CTRL_DELTA_T){
     b2g_B.aim_enabled = enable_auto_aim;
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
-    vofa.val[0]=geo->F_x;
-    vofa.val[1]=geo->F_y;
+    float estimated_total_power = 0.0f;
+    estimated_total_power += m3508_estimate_power(chasis_currents[0], motors.wheel_LF.speed*RPMtoRADS);
+    estimated_total_power += m3508_estimate_power(chasis_currents[1], motors.wheel_LB.speed*RPMtoRADS);
+    estimated_total_power += m3508_estimate_power(chasis_currents[2], motors.wheel_RF.speed*RPMtoRADS);
+    estimated_total_power += m3508_estimate_power(chasis_currents[3], motors.wheel_RB.speed*RPMtoRADS);
+
+    static float ob_fx;
+    static float ob_fy;
+    const float ob_alpha=0.05f;
+    ob_fx = ob_fx*(1.0f-ob_alpha) + geo->F_x*ob_alpha;
+    ob_fy = ob_fy*(1.0f-ob_alpha) + geo->F_y*ob_alpha;
+    vofa.val[0]=ob_fx;
+    vofa.val[1]=ob_fy;
     vofa.val[2]=geo->T_base_yaw;
 
-    vofa.val[3]=geo->vx;
+    // vofa.val[3]=geo->vx;
+    // vofa.val[0] = fmotor.wheel_LF.current;
+    // vofa.val[1] = fmotor.wheel_LB.current;
+    // vofa.val[2] = fmotor.wheel_RF.current;
+    // vofa.val[3] = fmotor.wheel_RB.current;
+
     vofa.val[4]=geo->vy;
-    vofa.val[5]=geo->vy;
-    vofa.val[6]=launch_state;
+    vofa.val[5]=geo->vyaw_gyro*(60.0f/(2.0f*PI));
 
-    // vofa.val[7]=geo->target_agi_pos;
-    // vofa.val[8]=geo->agi_vel;
-    // vofa.val[9]=fmotor.agi.position;
-
-    vofa.val[7]=geo->agi_pos;
-    vofa.val[8]=geo->target_agi_pos;
-    vofa.val[9]=fabsf(geo->target_agi_pos - geo->agi_pos);
+    vofa.val[6]=chasis_current_scaling;
+    vofa.val[7]=estimated_total_power;
+    vofa.val[8]=geo->measured_voltage;
+    vofa.val[9]=geo->measured_power;
 }
 
 
@@ -529,6 +564,12 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case G2B_MSG_C_ID:
         memcpy(&g2b_C, msg, 8);
         BTB_UPDATE_CNTDOWN();
+        break;
+    case 0x391:
+        // handle for voltage
+        memcpy(&robot_geo.measured_voltage, msg + 0, sizeof(float));
+        // handle for current
+        memcpy(&robot_geo.measured_current, msg + 4, sizeof(float));
         break;
     default:
         break;
