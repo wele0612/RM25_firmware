@@ -1,9 +1,9 @@
 #include <vision.h>
 #include <global_variables.h>
 
-#include <config.h>
-
 #ifdef CONFIG_PLATFORM_GIMBAL
+
+#ifdef CONFIG_AIM_RM_VISION
 
 static enum vision_recv_states_list_t{
     RECV_IDLE,
@@ -249,6 +249,8 @@ float third_order_fit(const float coes[], float x)
     // 仅需3次乘法和3次加法，比直接计算更精确且快速
     return ((coes[0] * x + coes[1]) * x + coes[2]) * x + coes[3];
 }
+
+#endif
 
 
 #endif

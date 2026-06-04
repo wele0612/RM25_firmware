@@ -1,7 +1,10 @@
 #ifndef _VISION_H
 #define _VISION_H
 
+#include <config.h>
 #include <stdint.h>
+
+#ifdef CONFIG_AIM_RM_VISION
 
 // RM-Vision style UART definitions
 
@@ -32,12 +35,6 @@ typedef struct __attribute__((packed)) {
     uint16_t checksum;           // CRC16校验码 (低字节在前，小端序)
 } McuToRosPacket_t;
 
-#define VISION_TO_ROS_SIZE (sizeof(McuToRosPacket_t))
-typedef union {
-    uint8_t buffer[VISION_TO_ROS_SIZE];
-    McuToRosPacket_t packet;
-} McuToRosData_t;
-
 typedef struct __attribute__((packed)) {
     uint8_t header;              // 帧头: 固定 0xA5
     
@@ -66,17 +63,6 @@ typedef struct __attribute__((packed)) {
     uint16_t checksum;           // CRC16校验码 (校验范围: 第0字节~第45字节)
 } RosToMcuPacket_t;
 
-#define VISION_FROM_ROS_SIZE (sizeof(RosToMcuPacket_t))
-typedef union {
-    uint8_t buffer[VISION_FROM_ROS_SIZE];
-    RosToMcuPacket_t packet;
-} RosToMcuData_t;
-
-#endif
-
-void vision_recv_byte(uint8_t data);
-uint8_t *vision_send_pack(McuToRosData_t *toRos);
-
 int vision_get_armorplate(float *yaw, float *pitch, float *vyaw, float *vpitch,
     float *distence, float predict_time);
 
@@ -84,3 +70,70 @@ int vision_get_body(float *yaw, float *pitch, float *vyaw, float *vpitch,
     float *distence, float predict_time);
 
 float third_order_fit(const float coes[], float x);
+
+#endif
+#ifdef CONFIG_AIM_SP_VISION_25
+
+// All units in RAD & Second
+typedef struct __attribute__((packed)) GimbalToVision
+{
+    uint8_t head[2]; // Must be {'S', 'P'};
+    uint8_t mode;  // 0: 空闲, 1: 自瞄, 2: 小符, 3: 大符
+    uint8_t aim_color; // 自瞄识别目标色 0:Blue  1:Red
+    float q[4];    // wxyz顺序
+    float yaw;
+    float yaw_vel;
+    float pitch;
+    float pitch_vel;
+    float bullet_speed;
+    uint16_t bullet_count;  // 子弹累计发送次数
+    uint16_t crc16;
+}McuToRosPacket_t; // 济瞄没用ROS，不过总之就叫这个名字吧
+
+typedef struct __attribute__((packed))
+{
+    uint8_t head[2]; // Must be {'S', 'P'};
+    uint8_t mode;  // 0: 不控制, 1: 控制云台但不开火，2: 控制云台且开火
+    // WHY not add a byte here...
+    float yaw;
+    float yaw_vel;
+    float yaw_acc;
+    float pitch;
+    float pitch_vel;
+    float pitch_acc;
+    uint16_t crc16;
+}RosToMcuPacket_t;
+
+typedef enum GimbalMode_t
+{
+  SP25_IDLE=0,        // 空闲
+  SP25_AUTO_AIM=1,    // 自瞄
+  SP25_SMALL_BUFF=2,  // 小符
+  SP25_BIG_BUFF=3     // 大符
+}GimbalMode_t;
+
+void ypr_to_spvision_q(float yaw, float pitch, float roll, float *q);
+
+#endif
+
+#define VISION_FROM_ROS_SIZE (sizeof(RosToMcuPacket_t))
+typedef union {
+    uint8_t buffer[VISION_FROM_ROS_SIZE];
+    RosToMcuPacket_t packet;
+} RosToMcuData_t;
+
+#define VISION_TO_ROS_SIZE (sizeof(McuToRosPacket_t))
+typedef union {
+    uint8_t buffer[VISION_TO_ROS_SIZE];
+    McuToRosPacket_t packet;
+} McuToRosData_t;
+
+
+void vision_recv_byte(uint8_t data);
+
+uint8_t *vision_send_pack(McuToRosData_t *toRos);
+
+
+
+#endif
+

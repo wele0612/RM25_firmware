@@ -17,28 +17,44 @@ void controller_init(){
 void controller_cycle(const float CTRL_DELTA_T){
     role_controller_step(CTRL_DELTA_T);
 
-    if(vision_FromRos.packet.tracking){
-        if((HAL_GetTick()%480) > 240){
-            buzzer_set_freq(TUNE_D6_SHARP_E6_FLAT);
-        }else{
-            buzzer_set_freq(TUNE_B6);
-        }
-        buzzer_on();
-    }else{
-        buzzer_off();
-    }
+    // if(vision_FromRos.packet.tracking){
+    //     if((HAL_GetTick()%480) > 240){
+    //         buzzer_set_freq(TUNE_D6_SHARP_E6_FLAT);
+    //     }else{
+    //         buzzer_set_freq(TUNE_B6);
+    //     }
+    //     buzzer_on();
+    // }else{
+    //     buzzer_off();
+    // }
     
     if(HAL_GetTick()%2 == 0){ // 500Hz
         McuToRosPacket_t* toRos = &(vision_ToRos.packet);
-        toRos->detect_color = 1;
-        toRos->roll = imu_data.roll; 
+        toRos->aim_color = 0;
+        toRos->bullet_speed = 25.0f;
+        toRos->mode = SP25_AUTO_AIM;
+
         #ifdef REVERSE_PITCH
         toRos->pitch = imu_data.pitch;
+        toRos->pitch_vel = imu_data.gyro[1];
         #else
-        toRos->pitch = -imu_data.pitch; // Note: ROS and ICM42688 has opposite defination for Pitch
+        // Note: ROS and ICM42688 has opposite defination for Pitch
+        toRos->pitch = -imu_data.pitch; 
+        toRos->pitch_vel = -imu_data.gyro[1]*DEGtoRAD;
         #endif
-        toRos->yaw = imu_data.yaw;
-        toRos->reset_tracker = 0;
+
+        float yaw_diff = imu_data.yaw - toRos->yaw;
+        if(yaw_diff > PI){
+            toRos->yaw += yaw_diff - (2.0f*PI);
+        }else if(yaw_diff < -PI){
+            toRos->yaw += yaw_diff + (2.0f*PI);
+        }else{
+            toRos->yaw += yaw_diff;
+        }
+        toRos->yaw_vel = imu_data.gyro[2]*DEGtoRAD;
+
+        ypr_to_spvision_q(imu_data.yaw, toRos->pitch, imu_data.roll, toRos->q);
+
         HAL_UART_StateTypeDef state = HAL_UART_GetState(AIMING_UART);
         if (state == HAL_UART_STATE_READY || state == HAL_UART_STATE_BUSY_RX){
             memcpy(vision_ToRos_buf, vision_send_pack(&vision_ToRos), VISION_TO_ROS_SIZE);
