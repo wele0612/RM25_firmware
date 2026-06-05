@@ -2,6 +2,7 @@
 #define __CTRL_INPUT_H
 
 #include <stdint.h>
+#include <assert.h>
 
 // Abstract for robot controls. All input from DR16, VTM or sentry are mapped into
 // this structure, than used by code to control. 
@@ -21,7 +22,7 @@ typedef struct __attribute__((packed)){
     uint8_t RSVD1;
 
 }chasis_ctrl_input_t;
-static_assert(sizeof(chasis_ctrl_input_t) == 8U);
+static_assert(sizeof(chasis_ctrl_input_t) == 8U, "Must be 8 bytes");
 
 typedef struct __attribute__((packed)){
     int16_t gimbal_mouse_yaw_omega; // 1e-4 RAD/LSB
@@ -42,7 +43,7 @@ typedef struct __attribute__((packed)){
     uint8_t RSVD1;
 
 }gimbal_ctrl_input_t;
-static_assert(sizeof(gimbal_ctrl_input_t) == 8U);
+static_assert(sizeof(gimbal_ctrl_input_t) == 8U, "Must be 8 bytes");
 
 
 #endif

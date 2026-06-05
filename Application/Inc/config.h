@@ -20,7 +20,7 @@
 // #define CONFIG_INPUT_VTM_LINK
 // #define CONFIG_INPUT_AUTO_SENTRY
 
-//========= Choose Control METHOD ===========
+//========= Choose Control Method ===========
 // #define CONFIG_KEYBOARD_CONTROL
 #define CONFIG_JOYSTICK_CONTROL
 

@@ -30,7 +30,7 @@ __BTB_VAR g2b_B_t g2b_B; // Chasis control input from gimbal
 // Base to Gimbal Message types:
 
 typedef struct __attribute__((packed)) {
-    gimbal_ctrl_input_t gimbal_ctrl;
+    gimbal_ctrl_input_t gimbal_ctrl; // Gimbal control input from chasis
 }b2g_A_t;
 __BTB_VAR b2g_A_t b2g_A;
 #define B2G_MSG_A_ID 0x20

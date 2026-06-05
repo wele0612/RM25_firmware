@@ -3,7 +3,7 @@
 
 #include <motors.h>
 
-#include <fdcan.h>
+#include <h7can.h>
 #include <btb.h>
 #include <global_variables.h>
 
@@ -120,10 +120,6 @@ void controller_cycle(const float CTRL_DELTA_T){
     memcpy(&b2g_A.gimbal_ctrl, &gimbal_ctrl, sizeof(gimbal_ctrl_input_t));
     fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&b2g_A, 8);
 
-}
-
-__weak void dr16_on_change(){
-    
 }
 
 #endif
