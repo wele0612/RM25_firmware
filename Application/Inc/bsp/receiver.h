@@ -4,11 +4,6 @@
 #include <stdint.h>
 #include <string.h>
 
-enum receiver_type{
-    RECEIVER_TYPE_DBUS,
-    RECEIVER_TYPE_IBUS
-};
-
 /*
 Bit0 -- W 键
 Bit1 -- S 键
@@ -32,6 +27,10 @@ Bit7 -- Ctrl 键
 #define DR16_SWITCH_MID (0x3)
 #define DR16_SWITCH_DOWN (0x2)
 
+#define DR16_EDGE_NONE (0U)
+#define DR16_EDGE_RISE (1U)
+#define DR16_EDGE_FALL (2U)
+
 typedef struct receiver_DBUS_t{
     float channel[4];
     int8_t s1; // {Up, Mid, Down}={1,3,2}
@@ -45,43 +44,20 @@ typedef struct receiver_DBUS_t{
         int16_t z;
         uint8_t press_l;
         uint8_t press_r;
+
+        uint8_t press_l_edge_event;
+        uint8_t press_r_edge_event;
     } mouse;
     struct
     {
         uint16_t v;
+        uint16_t v_edge_event;
     } key;
-    struct{
-            float channel[4];
-        int8_t s1;
-        int8_t s2;
-        float thumbwheel;
-        struct
-        {
-            int16_t x;
-            int16_t y;
-            int16_t z;
-            uint8_t press_l;
-            uint8_t press_r;
-        } mouse;
-        struct
-        {
-            uint16_t v;
-        } key;
-    }previous;
+
 }receiver_DBUS_t;
 
-typedef struct Aiming_message_t{
-    float target_yaw_rad;
-    float target_pitch_rad;
-    float target_distance_m;
-    uint32_t state_code;
-
-    uint8_t msg[64];
-}Aiming_message_t;
+int DR16_acquire_key_edge(receiver_DBUS_t *dr16, uint16_t KEY);
 
 void parse_DR16_receiver_msg(receiver_DBUS_t *dr16, uint8_t *msg);
-void set_DR16_previous_state(receiver_DBUS_t *dr16);
-
-void parse_aiming_receiver_msg(Aiming_message_t* aim);
 
 #endif

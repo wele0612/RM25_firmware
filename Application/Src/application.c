@@ -280,7 +280,6 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
 
         HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32); // 接收完毕后重启
 
-        set_DR16_previous_state(&dr16);
         parse_DR16_receiver_msg(&dr16, dr16_buffer_recv);
 
         timeout.last_remote_tick=HAL_GetTick();
@@ -308,12 +307,24 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
     
 }
 
-// void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
-// 	if(huart == DR16_UART)
-// 	{
-// 		__HAL_UNLOCK(huart);
-// 		HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, (uint8_t*), 32);
-//     }
-// }
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
+	if(huart == DR16_UART)
+	{
+		__HAL_UNLOCK(huart);
+		HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32);
+	}
+	else if(huart == REFEREE_UART)
+	{
+		__HAL_UNLOCK(huart);
+		HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
+	}
+	else if(huart == AIMING_UART)
+	{
+#ifdef CONFIG_PLATFORM_GIMBAL
+		__HAL_UNLOCK(huart);
+		HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
+#endif
+	}
+}
 
 
