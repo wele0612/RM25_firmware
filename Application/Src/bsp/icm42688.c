@@ -130,7 +130,7 @@ static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const f
 
     mahony->q[0] = q0; mahony->q[1] = q1; mahony->q[2] = q2; mahony->q[3] = q3;
 
-    #define PI 3.14159265359f
+    // #define PI 3.14159265359f
     mahony->roll  = atan2f(2.0f*(q0*q1 + q2*q3), 1.0f - 2.0f*(q1*q1 + q2*q2));
     mahony->pitch = asinf(fminf(fmaxf(-2.0f*(q1*q3 - q0*q2), -1.0f), 1.0f));
     mahony->yaw   = atan2f(2.0f*(q0*q3 + q1*q2), 1.0f - 2.0f*(q2*q2 + q3*q3));
