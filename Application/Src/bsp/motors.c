@@ -499,6 +499,8 @@ uint8_t *set_position_MyAct(uint8_t *msg, float degree, float speed){
     msg[5]=(uint8_t )(angleControl >> 8);
     msg[6]=(uint8_t )(angleControl >> 16);
     msg[7]=(uint8_t )(angleControl >> 24);
+
+    return msg;
 }
 
 /**
@@ -525,6 +527,8 @@ uint8_t *set_speed_MyAct(uint8_t *msg, float speed, uint8_t max_torque){
     msg[5]=(uint8_t )(speedControl >> 8);
     msg[6]=(uint8_t )(speedControl >> 16);
     msg[7]=(uint8_t )(speedControl >> 24);
+
+    return msg;
 }
 
 static inline uint8_t *set_current_MyAct(uint8_t *msg, float current){
@@ -593,4 +597,6 @@ void parse_feedback_X4_36(uint8_t *msg, report_X4_36_t *rpt){
 uint8_t *disable_MyAct(uint8_t *msg){
     memset(msg, 0x0, 8);
     msg[0]=MYACT_CMD_DISABLE_MOTOR;
+
+    return msg;
 }
