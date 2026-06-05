@@ -2,6 +2,11 @@
 #include <global_variables.h>
 #include <math.h>
 
+#ifdef CONFIG_PLATFORM_GIMBAL
+
+#ifdef CONFIG_AIM_SP_VISION_25
+
+
 static enum vision_recv_states_list_t{
     RECV_IDLE,
     RECV_FRAME_DATA
@@ -68,3 +73,6 @@ void ypr_to_spvision_q(float yaw, float pitch, float roll, float *q){
     q[2] = cy * sp * cr + sy * cp * sr;
     q[3] = sy * cp * cr - cy * sp * sr;
 }
+
+#endif
+#endif
