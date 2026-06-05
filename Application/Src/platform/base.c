@@ -118,7 +118,7 @@ void controller_cycle(const float CTRL_DELTA_T){
 
     // Upload gimbal control commands
     memcpy(&b2g_A.gimbal_ctrl, &gimbal_ctrl, sizeof(gimbal_ctrl_input_t));
-    fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&b2g_A, 8);
+    fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
 
 }
 

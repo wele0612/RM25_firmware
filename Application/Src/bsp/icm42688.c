@@ -575,6 +575,7 @@ volatile uint8_t icm_dma_done;
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
     if (hspi->Instance == SPI2) {
+        HAL_GPIO_WritePin(IMU_CS_GPIO_Port, IMU_CS_Pin, GPIO_PIN_SET);
         icm_dma_done = 1;
     }
 }
