@@ -41,7 +41,7 @@ __GLOBAL_VAR imu_data_t imu_data;
 #define REFEREE_UART &huart1
 __GLOBAL_VAR Referee_info_t referee;
 __GLOBAL_VAR Referee_info_t referee_prev;
-__GLOBAL_VAR uint8_t referee_buf[8];
+
 
 #define AIMING_UART &huart10
 __GLOBAL_VAR uint8_t vision_uart_buf[8];

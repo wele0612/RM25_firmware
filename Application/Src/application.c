@@ -17,6 +17,7 @@ timeout_monitor_t timeout;
 
 // DMA buffer outside
 RAM_D2_SECTION uint8_t dr16_buffer_recv[32]; // 18 bytes total
+RAM_D2_SECTION uint8_t referee_dma_buf[32];
 
 RAM_D2_SECTION robot_VOFA_report_t vofa = {.tail  = VOFA_TAIL};
 
@@ -52,7 +53,8 @@ void robot_init(){
     HAL_TIM_Base_Start_IT(&htim6);// BUG: IMU_INT1 does not work. Use TIM6 interruption for now...
     can_bsp_init();
     HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32);
-    HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
+    HAL_UART_Receive_DMA(REFEREE_UART, referee_dma_buf, 32);
+    __HAL_UART_ENABLE_IT(REFEREE_UART, UART_IT_IDLE);
     HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
 
     while(icm_init() != 0); //Init IMU
@@ -286,25 +288,44 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
         //HAL_UART_Transmit_DMA(&huart1, (uint8_t *)dr16.msg, 18);
         dr16_on_change();
 
-    }else if(huart == AIMING_UART){ // Using Baudrate 576000
+    }else if(huart == AIMING_UART){ // Using Baudrate 921600
         #ifdef CONFIG_ENABLE_VISION
         vision_recv_byte(vision_uart_buf[0]);
         HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
         #endif
-    }else if(huart == REFEREE_UART){
-        referee_recv_byte(referee_buf[0]);
-        HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
     }
 
 }
 
+static uint16_t referee_dma_read_idx = 0;
+
+static void referee_dma_process(void){
+    UART_HandleTypeDef* huart = REFEREE_UART;
+    uint16_t ndtr = __HAL_DMA_GET_COUNTER(huart->hdmarx);
+    uint16_t write_idx = 32 - ndtr;
+    
+    while(referee_dma_read_idx != write_idx){
+        referee_recv_byte(referee_dma_buf[referee_dma_read_idx]);
+        referee_dma_read_idx = (referee_dma_read_idx + 1) % 32;
+    }
+}
+
+void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart){
+    if(huart == REFEREE_UART){
+        referee_dma_process();
+    }
+}
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
-    robot_UART_msgcallback(huart);
+    if(huart == REFEREE_UART){
+        referee_dma_process();
+    }else{
+        robot_UART_msgcallback(huart);
+    }
 }
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
     robot_UART_msgcallback(huart);
-    
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
@@ -316,13 +337,23 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
 	else if(huart == REFEREE_UART)
 	{
 		__HAL_UNLOCK(huart);
-		HAL_UART_Receive_IT(REFEREE_UART, referee_buf, 1);
+		HAL_UART_DMAStop(REFEREE_UART);
+		HAL_UART_Receive_DMA(REFEREE_UART, referee_dma_buf, 32);
+		__HAL_UART_ENABLE_IT(REFEREE_UART, UART_IT_IDLE);
 	}
 	else if(huart == AIMING_UART)
 	{
 		__HAL_UNLOCK(huart);
 		HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
 	}
+}
+
+void referee_uart_idle_handler(void){
+    UART_HandleTypeDef* huart = REFEREE_UART;
+    if(__HAL_UART_GET_FLAG(huart, UART_FLAG_IDLE)){
+        __HAL_UART_CLEAR_IDLEFLAG(huart);
+        referee_dma_process();
+    }
 }
 
 

@@ -54,4 +54,6 @@ void role_controller_step(const float CTRL_DELTA_T);
 void robot_CAN_msgcallback(int ID, uint8_t *msg);
 void dr16_on_change();
 
+void referee_uart_idle_handler(void);
+
 #endif
