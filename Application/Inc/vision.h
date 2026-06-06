@@ -95,7 +95,7 @@ typedef struct __attribute__((packed))
     uint8_t head[2]; // Must be {'S', 'P'};
     uint8_t mode;  // 0: 不控制, 1: 控制云台但不开火，2: 控制云台且开火
     uint8_t is_self_color_red;
-    // WHY not add a byte here...
+
     float yaw;
     float yaw_vel;
     float yaw_acc;

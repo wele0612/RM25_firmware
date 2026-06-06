@@ -2,7 +2,7 @@
 #include <global_variables.h>
 #include <math.h>
 
-#ifdef CONFIG_PLATFORM_GIMBAL
+#ifdef CONFIG_ENABLE_VISION
 
 #ifdef CONFIG_AIM_SP_VISION_25
 

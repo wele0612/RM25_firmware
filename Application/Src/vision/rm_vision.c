@@ -1,7 +1,7 @@
 #include <vision.h>
 #include <global_variables.h>
 
-#ifdef CONFIG_PLATFORM_GIMBAL
+#ifdef CONFIG_ENABLE_VISION
 
 #ifdef CONFIG_AIM_RM_VISION
 

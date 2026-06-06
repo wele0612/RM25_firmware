@@ -3,7 +3,7 @@
 
 #include<stdint.h>
 
-#define PI (3.1415926f)
+#define PI (3.14159265359f)
 
 #define RADtoDEG (180.0f/PI)
 #define DEGtoRAD (PI/180.0f)

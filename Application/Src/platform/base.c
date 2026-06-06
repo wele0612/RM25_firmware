@@ -74,8 +74,8 @@ void dr16_on_change(){
         
     #endif
     #ifdef CONFIG_JOYSTICK_CONTROL
-        chasis_ctrl.robot_forward_v = (int16_t)(dr16.channel[0]*2.0f*1e3f);
-        chasis_ctrl.robot_leftward_v = (int16_t)(-dr16.channel[1]*2.0f*1e3f);
+        chasis_ctrl.robot_forward_v = (int16_t)(dr16.channel[1]*2.0f*1e3f);
+        chasis_ctrl.robot_leftward_v = (int16_t)(-dr16.channel[0]*2.0f*1e3f);
         chasis_ctrl.robot_yaw_omega = (int16_t)(-dr16.channel[2]*PI*1e3f);
 
         int swap_head_tail = 0;

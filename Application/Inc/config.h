@@ -8,8 +8,8 @@
 //========= Choose Robot ===========
 // #define CONFIG_ROBOT_INFANTRY_BALANCE
 // #define CONFIG_ROBOT_INFANTRY_OMNI
-#define CONFIG_ROBOT_HERO
-// #define CONFIG_ROBOT_AIMING_BENCH
+// #define CONFIG_ROBOT_HERO
+#define CONFIG_ROBOT_AIMING_BENCH
 
 //========= Choose Vision System ===========
 #define CONFIG_AIM_SP_VISION_25
@@ -29,6 +29,7 @@
 // UNLESS you clearly know what you are doing
 //--------------------------------------------
 
+#define CONFIG_ENABLE_VISION
 
 //========= Dependent Options ===========
 #if defined(CONFIG_ROBOT_INFANTRY_BALANCE) && defined(CONFIG_PLATFORM_GIMBAL)

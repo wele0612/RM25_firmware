@@ -4,7 +4,7 @@
 #include<vision.h>
 #include<global_variables.h>
 #include<btb.h>
-#include<fdcan.h>
+#include<h7can.h>
 
 #include<buzzer.h>
 #ifdef CONFIG_PLATFORM_GIMBAL

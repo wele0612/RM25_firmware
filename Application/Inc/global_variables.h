@@ -50,7 +50,7 @@ __GLOBAL_VAR uint8_t vision_uart_buf[8];
 __GLOBAL_VAR chasis_ctrl_input_t chasis_ctrl;
 __GLOBAL_VAR gimbal_ctrl_input_t gimbal_ctrl;
 
-#ifdef CONFIG_PLATFORM_GIMBAL
+#ifdef CONFIG_ENABLE_VISION
 #include<vision.h>
 
 __GLOBAL_VAR McuToRosData_t vision_ToRos;
