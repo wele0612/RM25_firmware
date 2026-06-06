@@ -51,24 +51,37 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     robot_ctrl_t *geo = &robot_geo;
 
-    geo->target_vy = dr16.channel[1]*3.0f;
-    geo->target_vx = dr16.channel[0]*3.0f;
+    // geo->target_vy = dr16.channel[1]*3.0f;
+    // geo->target_vx = dr16.channel[0]*3.0f;
     // geo->target_vyaw = dr16.channel[2]*2.0f;
 
-    if(dr16.s2 == DR16_SWITCH_MID){
-        geo->target_vyaw = 0.5f*2.0f*PI;
-    }else if(dr16.s2 == DR16_SWITCH_UP){
-        geo->target_vyaw = 1.2f*2.0f*PI;
+    if(dr16.s1 == DR16_SWITCH_UP){
+        const float nav_speedlimit = 0.2f;
+        geo->target_vy = limit_val(vision_FromRos.packet.forward_vel, nav_speedlimit);
+        geo->target_vx = limit_val(-vision_FromRos.packet.leftward_vel, nav_speedlimit);
     }else{
-        geo->target_vyaw = -dr16.channel[2]*1.0f;
-        geo->yaw_offset = imu_data.yaw;
+        geo->target_vy = chasis_ctrl.robot_forward_v*1e-3f;
+        geo->target_vx = -chasis_ctrl.robot_leftward_v*1e-3f;
+        geo->target_vyaw = chasis_ctrl.robot_yaw_omega*1e-3f;
     }
+
+
+    // if(dr16.s2 == DR16_SWITCH_MID){
+    //     geo->target_vyaw = 0.5f*2.0f*PI;
+    // }else if(dr16.s2 == DR16_SWITCH_UP){
+    //     geo->target_vyaw = 1.2f*2.0f*PI;
+    // }else{
+    //     geo->target_vyaw = -dr16.channel[2]*1.0f;
+    //     geo->yaw_offset = imu_data.yaw;
+    // }
     
-    if (dr16.s1 == DR16_SWITCH_MID) { // 8Hz 
-        geo->target_agi_omega = - 2.5f*2.0f*PI;
-    } else {
-        geo->target_agi_omega = 0.0f;
-    }
+    // if (dr16.s1 == DR16_SWITCH_MID) { // 16Hz 
+    //     geo->target_agi_omega = - 0.33f*2.0f*PI;
+    // } else if(dr16.s1 == DR16_SWITCH_UP){
+    //     geo->target_agi_omega = 0.2f*PI;
+    // } else {
+    //     geo->target_agi_omega = 0.0f;
+    // }
 
     // geo->target_agi_omega = 2.0f*PI;
 
@@ -84,7 +97,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->vyaw = imu_data.gyro[2]*DEGtoRAD;
     geo->agi_omega = motors.agi.speed * RPMtoRADS; // update agi omega
 
-    const float body_yaw_offset = imu_data.yaw - geo->yaw_offset;
+    // const float body_yaw_offset = imu_data.yaw - geo->yaw_offset;
+    const float body_yaw_offset = 0.0f;
     const float cosby = cosf(body_yaw_offset);
     const float sinby = sinf(body_yaw_offset);
 
@@ -137,9 +151,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[5]=geo->vx;
     // vofa.val[6]=geo->vyaw;
     vofa.val[4] = powermeter_voltage;
-    vofa.val[5] = powermeter_current;
+    vofa.val[5] = vision_FromRos.packet.forward_vel;
     vofa.val[6] = powermeter_current * powermeter_voltage - 1.2f; // power
-    vofa.val[7] = dr16.channel[1];
+    vofa.val[7] = motors.agi.current;
 
     vofa.val[8] = geo->agi_omega * M2006_GEAR_RATIO;
     vofa.val[9] = estimated_total_power;
@@ -212,23 +226,7 @@ void role_controller_init(){
 }
 
 void role_controller_step(const float CTRL_DELTA_T){
-    // float pitch_tau = dr16.channel[0] * 2.0f;
-    // fdcanx_send_data(&hfdcan3, 0x0F, set_torque_DM4310(motors.pitch.tranmitbuf, pitch_tau), 8);
-    // if (dr16.channel[0] >= 0.5f) {
-    //     robot_geo.target_pitch_omega = 1.0f;
-    // } else if (dr16.channel[0] <= -0.5f) {
-    //     robot_geo.target_pitch_omega = -1.0f;
-    // }else {
-    //     robot_geo.target_pitch_omega = 0.0f;
-    // }
-    // -0.2 -> 0.5
-    // if (dr16.channel[0] >= 0.5f) {
-    //     robot_geo.target_pitch_pos = 0.50f;
-    // } else if (dr16.channel[0] <= -0.5f) {
-    //     robot_geo.target_pitch_pos = -0.10f;
-    // }else {
-    //     robot_geo.target_pitch_pos = 0.25f;
-    // }
+
     robot_geo.target_pitch_pos += -0.007f * (float)dr16.mouse.y * CTRL_DELTA_T;
     if (robot_geo.target_pitch_pos >= 0.5f) {
         robot_geo.target_pitch_pos = 0.5f;

@@ -287,7 +287,7 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart){
         dr16_on_change();
 
     }else if(huart == AIMING_UART){ // Using Baudrate 576000
-        #ifdef CONFIG_PLATFORM_GIMBAL
+        #ifdef CONFIG_ENABLE_VISION
         vision_recv_byte(vision_uart_buf[0]);
         HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
         #endif
@@ -320,10 +320,8 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
 	}
 	else if(huart == AIMING_UART)
 	{
-#ifdef CONFIG_PLATFORM_GIMBAL
 		__HAL_UNLOCK(huart);
 		HAL_UART_Receive_IT(AIMING_UART, vision_uart_buf, 1);
-#endif
 	}
 }
 
