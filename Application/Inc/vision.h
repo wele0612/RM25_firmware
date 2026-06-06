@@ -94,6 +94,7 @@ typedef struct __attribute__((packed))
 {
     uint8_t head[2]; // Must be {'S', 'P'};
     uint8_t mode;  // 0: 不控制, 1: 控制云台但不开火，2: 控制云台且开火
+    uint8_t is_self_color_red;
     // WHY not add a byte here...
     float yaw;
     float yaw_vel;
@@ -101,6 +102,11 @@ typedef struct __attribute__((packed))
     float pitch;
     float pitch_vel;
     float pitch_acc;
+
+    float forward_vel;
+    float leftward_vel;
+    uint8_t spintop_level;
+    
     uint16_t crc16;
 }RosToMcuPacket_t;
 
