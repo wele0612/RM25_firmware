@@ -261,14 +261,8 @@
             float agi_vel;
             float agi_pos;
 
-            float gimbal_abs_yaw_vel;
-            float gimbal_mtr_yaw_vel;
             float gimbal_abs_yaw_pos; // Yaw in World coordinate
             float gimbal_mtr_yaw_pos; // Yaw in body coordinate (from motor encoder)
-            float gimbal_mtr_pitch_pos;
-            float gimbal_mtr_fold_pos;
-            float input_yaw_vel;
-            float input_pitch_vel;
 
             float F_x;  // Gimbal coordinate system
             float F_y;  // Gimbal coordinate system
@@ -291,9 +285,6 @@
 
             float target_vx_b;
             float target_vy_b;
-
-            float target_yaw_vel; // Gimbal Yaw vel
-            float target_yaw_pos; // Gimbal Yaw pos
 
             float target_agi_vel;
             float target_agi_pos;
