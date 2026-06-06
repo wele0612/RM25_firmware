@@ -73,6 +73,7 @@ extern DMA_HandleTypeDef hdma_uart7_tx;
 extern DMA_HandleTypeDef hdma_usart1_tx;
 extern DMA_HandleTypeDef hdma_usart1_rx;
 extern DMA_HandleTypeDef hdma_usart10_tx;
+extern DMA_HandleTypeDef hdma_usart10_rx;
 extern UART_HandleTypeDef huart5;
 extern UART_HandleTypeDef huart7;
 extern UART_HandleTypeDef huart1;
@@ -407,12 +408,29 @@ void SPI2_IRQHandler(void)
 void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
-  referee_uart_idle_handler();
+  if(__HAL_UART_GET_FLAG(&huart1, UART_FLAG_IDLE)){
+      __HAL_UART_CLEAR_IDLEFLAG(&huart1);
+      robot_UART_msgcallback(&huart1, HAL_UART_RXEVENT_IDLE);
+  }
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
 
   /* USER CODE END USART1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles DMA1 stream7 global interrupt.
+  */
+void DMA1_Stream7_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Stream7_IRQn 0 */
+
+  /* USER CODE END DMA1_Stream7_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart10_rx);
+  /* USER CODE BEGIN DMA1_Stream7_IRQn 1 */
+
+  /* USER CODE END DMA1_Stream7_IRQn 1 */
 }
 
 /**
@@ -480,7 +498,10 @@ void UART7_IRQHandler(void)
 void USART10_IRQHandler(void)
 {
   /* USER CODE BEGIN USART10_IRQn 0 */
-
+  if(__HAL_UART_GET_FLAG(&huart10, UART_FLAG_IDLE)){
+      __HAL_UART_CLEAR_IDLEFLAG(&huart10);
+      robot_UART_msgcallback(&huart10, HAL_UART_RXEVENT_IDLE);
+  }
   /* USER CODE END USART10_IRQn 0 */
   HAL_UART_IRQHandler(&huart10);
   /* USER CODE BEGIN USART10_IRQn 1 */

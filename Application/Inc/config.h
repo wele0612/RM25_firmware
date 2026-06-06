@@ -8,8 +8,8 @@
 //========= Choose Robot ===========
 // #define CONFIG_ROBOT_INFANTRY_BALANCE
 // #define CONFIG_ROBOT_INFANTRY_OMNI
-#define CONFIG_ROBOT_HERO
-// #define CONFIG_ROBOT_AIMING_BENCH
+// #define CONFIG_ROBOT_HERO
+#define CONFIG_ROBOT_AIMING_BENCH
 
 //========= Choose Vision System ===========
 #define CONFIG_AIM_SP_VISION_25

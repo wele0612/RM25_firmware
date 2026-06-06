@@ -44,7 +44,6 @@ __GLOBAL_VAR Referee_info_t referee_prev;
 
 
 #define AIMING_UART &huart10
-__GLOBAL_VAR uint8_t vision_uart_buf[8];
 
 #include <ctrl_input.h>
 __GLOBAL_VAR chasis_ctrl_input_t chasis_ctrl;
