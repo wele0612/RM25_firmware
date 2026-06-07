@@ -81,9 +81,10 @@ void dr16_on_change(){
         int swap_head_tail = 0;
 
         chasis_ctrl.fire_pressed = 0;
-        chasis_ctrl.spintop_level = 0;
+        chasis_ctrl.spintop_level = (dr16.s2 == DR16_SWITCH_UP) ? 1:0;
         chasis_ctrl.supercap_discharge = 0;
         chasis_ctrl.swap_head_tail = swap_head_tail;
+        chasis_ctrl.chasis_yaw_follow = (dr16.s2 == DR16_SWITCH_DOWN) ? 1:0;
 
         gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-dr16.channel[3]*2*PI*1e3f);
         gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
@@ -118,8 +119,11 @@ void controller_cycle(const float CTRL_DELTA_T){
     #endif
 
     // Upload gimbal control commands
-    memcpy(&b2g_A.gimbal_ctrl, &gimbal_ctrl, sizeof(gimbal_ctrl_input_t));
-    fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
+    if(remote_online()){
+        memcpy(&b2g_A.gimbal_ctrl, &gimbal_ctrl, sizeof(gimbal_ctrl_input_t));
+        fdcanx_send_data(&hfdcan1, B2G_MSG_A_ID, (uint8_t *)&b2g_A, 8);
+    }
+    
 
 }
 

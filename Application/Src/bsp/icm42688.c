@@ -12,6 +12,8 @@
 #define ICM_CLK_GEN_TIM (&htim1)
 #define ICM_USE_SPI     (&hspi2)
 
+#define MAHONY_ACC_WEIGHT_N 3.0f
+
 #ifndef DEG2RAD
 #define DEG2RAD (3.14159265358979323846f / 180.0f)
 #endif
@@ -43,8 +45,8 @@ static inline void Mahony_Init(MahonyAHRS *mahony) {
     mahony->q[0]=1.0f; mahony->q[1]=mahony->q[2]=mahony->q[3]=0.0f;
     mahony->integralFB[0]=mahony->integralFB[1]=mahony->integralFB[2]=0.0f;
 
-    mahony->Kp = 1.0f;       
-    mahony->Ki = 0.01f;
+    mahony->Kp = 0.5f;       
+    mahony->Ki = 0.005f;
 
     mahony->roll = mahony->pitch = mahony->yaw = 0.0f;
 }
@@ -63,12 +65,14 @@ static inline void Mahony_Update(MahonyAHRS *mahony, const float acc[3], const f
 
     acc_norm_sq = acc[0]*acc[0] + acc[1]*acc[1] + acc[2]*acc[2];
     
-    // Adaptive gain: boost PI when static (near 1g & low rotation) for faster bias convergence
     float gain_mul = 1.0f;
     if(acc_norm_sq > 0.0001f){
         float acc_norm = sqrtf(acc_norm_sq);
-        float gyro_norm = sqrtf(gyro[0]*gyro[0] + gyro[1]*gyro[1] + gyro[2]*gyro[2]);
-        if(fabsf(acc_norm - 1.0f) < 0.15f && gyro_norm < 0.1f) gain_mul = 5.0f; // 3x gain when steady
+        if(acc_norm > 0.95f && acc_norm < 1.05f){
+            gain_mul = MAHONY_ACC_WEIGHT_N;
+        } else {
+            gain_mul = 1.0f / MAHONY_ACC_WEIGHT_N;
+        }
     }
     kp = mahony->Kp * gain_mul;
     ki = mahony->Ki * gain_mul;
@@ -642,8 +646,8 @@ int icm_read_all_data_dma(float accel_data[3], float gyro_data[3])
     gyro_raw[2] = (int16_t)((buffer[10] << 8) | buffer[11]);
 
     // --- 转换为物理单位 ---
-    // const float accel_sensitivity = 2048.0f; // ±16g
-    const float accel_sensitivity = 1024.0f; // ±16g
+    const float accel_sensitivity = 2048.0f; // ±16g
+    // const float accel_sensitivity = 1024.0f; // ±16g
     const float gyro_sensitivity  = 16.4f;   // ±2000 dps
 
     accel_data[0] = accel_raw[0] / accel_sensitivity;

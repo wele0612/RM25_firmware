@@ -16,25 +16,6 @@
 
 #ifdef CONFIG_ROBOT_HERO
 
-enum {
-    GIM_STANDBY = 0,
-    GIM_IMU_PREP_FOLDRISE = 1,
-    GIM_IMU_PREP_GIMDOWN = 2,
-    GIM_IMU = 3,
-    GIM_FOLD_PREP = 4,
-    GIM_FOLD = 5,
-    GIM_SNIPER = 6, // 吊射模式
-}gim_state;
-
-enum {
-    LAUNCH_INIT = 0, // 初始模式
-    LAUNCH_IMU = 1, // 近战模式，积累位置环
-    LAUNCH_SNP_FEEDTURN = 2, // 吊射模式阶段一，预置转
-    LAUNCH_SNP_AGITURN = 3, // 吊射模式阶段二，拨弹转
-}launch_state;
-
-const float FOLD_MODE_PITCH_MOTOR_RAD = 129.0f*DEGtoRAD;
-
 #ifdef CONFIG_PLATFORM_BASE
 
 const float AGI_PER_POS_INCRE = 2*PI/6.0f;
@@ -56,7 +37,6 @@ static void inline init_agi_damiao(){
 }
 
 void role_controller_init(){
-    gim_state = GIM_STANDBY;
 
     HAL_Delay(1500);
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
@@ -89,7 +69,7 @@ PID_t body_yaw_vel_pid={
 };
 
 PID_t body_yaw_pos_pid={
-    .P = 1.0f,
+    .P = 3.0f,
     .I = 0.0f,
     .D = 0.0f,
     .integral_max = 0.1f
@@ -183,7 +163,18 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     geo->target_vx = -chasis_ctrl.robot_leftward_v*1e-3f;
     geo->target_vy = chasis_ctrl.robot_forward_v*1e-3f;
-    geo->target_vyaw = chasis_ctrl.robot_yaw_omega*1e-3f;
+    // geo->target_vyaw = chasis_ctrl.robot_yaw_omega*1e-3f;
+    if(BTB_ONLINE && remote_online()){
+        if(chasis_ctrl.chasis_yaw_follow){
+            float body_ori_err = -wrap_to_pi(body_yaw_offset);
+            geo->target_vyaw = pid_cycle(&body_yaw_pos_pid, body_ori_err, CTRL_DELTA_T);
+            geo->target_vyaw = limit_val(geo->target_vyaw, 2.0f);
+        }else{
+            geo->target_vyaw = chasis_ctrl.spintop_level*PI;
+        }
+    }else{
+        geo->target_vyaw = 0.0f;
+    }
 
     geo->F_x = pid_cycle(&body_x_vel_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
     geo->F_y = pid_cycle(&body_y_vel_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
@@ -256,9 +247,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float ob_alpha=0.05f;
     ob_fx = ob_fx*(1.0f-ob_alpha) + geo->F_x*ob_alpha;
     ob_fy = ob_fy*(1.0f-ob_alpha) + geo->F_y*ob_alpha;
-    vofa.val[0]=ob_fx;
-    vofa.val[1]=ob_fy;
-    vofa.val[2]=geo->T_base_yaw;
+    vofa.val[0]=sqrtf(imu_data.acc[0]*imu_data.acc[0] +
+        imu_data.acc[1]*imu_data.acc[1] + imu_data.acc[2]*imu_data.acc[2]);
+    vofa.val[1]=imu_data.roll*RADtoDEG;
+    vofa.val[2]=imu_data.pitch*RADtoDEG;
 
     vofa.val[3]=fmotor.yaw.position;
     // vofa.val[0] = fmotor.wheel_LF.current;
@@ -365,9 +357,9 @@ PID_t g_pitch_pos_pid={
 };
 
 PID_t g_yaw_vel_pid={
-    .P=6.0f,
-    .I=60.0f,
-    .D=0.015f,
+    .P=3.0f,
+    .I=30.0f,
+    .D=0.007f,
     .integral_max=0.05f
 };
 
@@ -426,7 +418,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     float input_yaw_vel = gimbal_ctrl.gimbal_yaw_omega*1e-3f;
     geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
     // geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 1.0f)*0.7f;
-
+    if(!BTB_ONLINE){
+        geo->target_yaw_pos = geo->abs_yaw_pos;
+    }
     geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->abs_yaw_pos), CTRL_DELTA_T);
     geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + input_yaw_vel;
 
