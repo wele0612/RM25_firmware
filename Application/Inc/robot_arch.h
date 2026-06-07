@@ -48,42 +48,30 @@
             report_M3508_t flywheel_2; // ID = 2
             report_M3508_t flywheel_3; // ID = 3
 
-            report_M2006_t feeder_top; // ID = 4
-
             report_X4_36_t pitch; // ID = 5
-            report_X4_36_t fold;  // ID = 6
 
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{ // All units SI, unless specified.
-            float feeder_position;
-            float feeder_vel;
-
-            float input_pitch_vel;
-
-            float yaw_vel_imu;
-            float yaw_m1;
+            float mtr_yaw_pos;
+            float abs_yaw_vel;
+            float abs_yaw_pos;
 
             float mtr_pitch_vel;
             float abs_pitch_vel;
             float mtr_pitch_pos; // Motor encoder pitch
             float abs_pitch_pos; // IMU pitch
 
-            float mtr_fold_pos;
-
             float T_pitch;
+            float T_yaw;
             
             // Gimbal Control Mode
             float target_pitch_vel;
             float target_pitch_pos;
-
-            // Gimbal Folding Motor Mode
-            float target_mp_vel;
-            float target_mp_pos;
+            float target_yaw_vel;
+            float target_yaw_pos;
 
             float target_flywheel_rpm; // RPM
-            float target_feeder_vel;
-            float target_feeder_position;
         }robot_ctrl_t;
     #endif
     

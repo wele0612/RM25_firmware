@@ -365,16 +365,16 @@ PID_t g_pitch_pos_pid={
 };
 
 PID_t g_yaw_vel_pid={
-    .P=4.5f,
-    .I=50.0f,
-    .D=0.012f,
-    .integral_max=0.01f
+    .P=6.0f,
+    .I=60.0f,
+    .D=0.015f,
+    .integral_max=0.05f
 };
 
 PID_t g_yaw_pos_pid={
     .P=22.0f,
     .I=0.0f,
-    .D=0.4f,
+    .D=0.7f,
     .integral_max=0.01f
 };
 
@@ -424,11 +424,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->abs_yaw_vel = imu_data.gyro[2]*DEGtoRAD;
 
     float input_yaw_vel = gimbal_ctrl.gimbal_yaw_omega*1e-3f;
-    // geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
-    geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 1.0f)*0.7f;
+    geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
+    // geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 1.0f)*0.7f;
 
     geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->abs_yaw_pos), CTRL_DELTA_T);
-    // geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + input_yaw_vel;
+    geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + input_yaw_vel;
+
+    // geo->target_yaw_vel = unit_step_generator(input_yaw_vel, 1.0f)*1.2f;
 
     float T_yaw = pid_cycle(&g_yaw_vel_pid, geo->target_yaw_vel - geo->abs_yaw_vel, CTRL_DELTA_T);
 
@@ -492,7 +494,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[4]=geo->mtr_pitch_vel;
     
     vofa.val[5]=V_pitch;
-    vofa.val[6]=(float)gimbal_ctrl.flywheel_enabled;
+    vofa.val[6]=geo->target_yaw_vel;
     // vofa.val[6]=predict_distence;
 
     vofa.val[7]=geo->abs_yaw_vel;

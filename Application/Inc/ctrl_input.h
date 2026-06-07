@@ -25,8 +25,8 @@ typedef struct __attribute__((packed)){
 static_assert(sizeof(chasis_ctrl_input_t) == 8U, "Must be 8 bytes");
 
 typedef struct __attribute__((packed)){
-    int16_t gimbal_mouse_yaw_omega; // 1e-4 RAD/LSB
-    int16_t gimbal_mouse_pitch_omega; // 1e-4 RAD/LSB
+    int16_t gimbal_yaw_omega; // 1e-3 RAD/LSB
+    int16_t gimbal_pitch_omega; // 1e-3 RAD/LSB
 
     // Projectile speed from referee system, 1e-3 m/(s*LSB)
     int16_t feedback_shoot_speed; 

@@ -118,6 +118,38 @@ inline float filter_iir_eval(iir_filter_t *iir, const float x, const int order, 
     return y;
 }
 
+/*
+* Linearly map a value from [a1,a2] to [b1,b2].
+* If x < a1, output b1. If x > a2, output b2.
+* 
+* NOTE: a1 must be less than a2 !!!
+*/
+float linear_map(float x, const float a1, const float a2, const float b1, const float b2){
+    if (x < a1) {
+        return b1;
+    }
+    if (x > a2) {
+        return b2;
+    }
+    if (a2 == a1) {
+        return b1;
+    }
+    return b1 + (b2 - b1) * (x - a1) / (a2 - a1);
+}
+
+/*
+* To convert analog input into binary step signal.
+*/
+float unit_step_generator(float x, const float threshold){
+    if(x > threshold){
+        return 1.0f;
+    }else if(x < -threshold){
+        return -1.0f;
+    }else{
+        return 0.0f;
+    }
+}
+
 // CRC8 generator polynomial: G(x) = x8 + x5 + x4 + 1
 
 const unsigned char CRC8_TAB[256] = {

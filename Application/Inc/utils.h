@@ -53,6 +53,10 @@ typedef struct iir_filter_t{
 
 float filter_iir_eval(iir_filter_t* iir, const float x, const int order, const float a[4], const float b[4]);
 
+float linear_map(float x, const float a1, const float a2, const float b1, const float b2);
+
+float unit_step_generator(float x, const float threshold);
+
 #define CRC8_INIT (0xff)
 #define CRC16_INIT (0xffff)
 unsigned char Get_CRC8_Check_Sum(unsigned char *pchMessage, unsigned int dwLength, unsigned char ucCRC8);
