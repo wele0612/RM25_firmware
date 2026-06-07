@@ -76,7 +76,7 @@ void dr16_on_change(){
     #ifdef CONFIG_JOYSTICK_CONTROL
         chasis_ctrl.robot_forward_v = (int16_t)(dr16.channel[1]*2.0f*1e3f);
         chasis_ctrl.robot_leftward_v = (int16_t)(-dr16.channel[0]*2.0f*1e3f);
-        chasis_ctrl.robot_yaw_omega = (int16_t)(-dr16.channel[2]*PI*1e3f);
+        chasis_ctrl.robot_yaw_omega = 0;
 
         int swap_head_tail = 0;
 
@@ -85,8 +85,9 @@ void dr16_on_change(){
         chasis_ctrl.supercap_discharge = 0;
         chasis_ctrl.swap_head_tail = swap_head_tail;
 
-        gimbal_ctrl.gimbal_mouse_pitch_omega = 0;
-        gimbal_ctrl.gimbal_mouse_yaw_omega = 0;
+        gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-dr16.channel[3]*2*PI*1e3f);
+        gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
+
         gimbal_ctrl.swap_head_tail = swap_head_tail;
         gimbal_ctrl.gimbal_control_mode = 1;
         gimbal_ctrl.flywheel_enabled = (dr16.s1 == DR16_SWITCH_UP);

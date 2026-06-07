@@ -124,6 +124,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
+    if(HAL_GetTick() % 1000){
+        fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
+    }
+
     float m_power = geo->measured_current*geo->measured_voltage;
     const float power_alpha = 0.2f;
     geo->measured_power = power_alpha*m_power + (1.0f-power_alpha)*geo->measured_power;
@@ -231,7 +235,11 @@ void role_controller_step(const float CTRL_DELTA_T){
         chasis_currents[2]*chasis_current_scaling,
         chasis_currents[3]*chasis_current_scaling), 8);
 
-    geo->T_yaw = 0.0f;
+    if(BTB_ONLINE){
+        geo->T_yaw=limit_val(g2b_A.gimbal_request_T_yaw*1e-3f, 10.0f);
+    }else{
+        geo->T_yaw=0.0f;
+    }
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, set_torque_DM4310(motors.yaw.tranmitbuf, geo->T_yaw), 8);
 
     geo->T_agi=0.0f;
@@ -262,7 +270,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[5]=geo->vyaw_gyro*(60.0f/(2.0f*PI));
 
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
-    vofa.val[7]=estimated_total_power;
+    vofa.val[7]=(float)(g2b_A.gimbal_request_T_yaw*1e-3f);
     vofa.val[8]=chasis_ctrl.robot_forward_v*1e-3f;
     vofa.val[9]=geo->measured_power;
 }
@@ -356,6 +364,20 @@ PID_t g_pitch_pos_pid={
     .integral_max=0.01f
 };
 
+PID_t g_yaw_vel_pid={
+    .P=4.5f,
+    .I=50.0f,
+    .D=0.012f,
+    .integral_max=0.01f
+};
+
+PID_t g_yaw_pos_pid={
+    .P=22.0f,
+    .I=0.0f,
+    .D=0.4f,
+    .integral_max=0.01f
+};
+
 // uint8_t reset_zeropoint[8] = {0x64,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 void role_controller_init(){
 
@@ -379,22 +401,47 @@ void role_controller_step(const float CTRL_DELTA_T){
     __disable_irq(); // Important Note: create a snapshot of all motor states.
     fmotor = motors; 
     __enable_irq();
-    
 
-    // if(BTB_ONLINE){
-    //     if(b2g_B.flywheel_enabled){
-    //         if(gim_state == GIM_SNIPER){
-    //             geo->target_flywheel_rpm = 4075.0f;
-    //         }else{
-    //             geo->target_flywheel_rpm = 3500.0f;
-    //         }
-            
-    //     }else{
-    //         geo->target_flywheel_rpm = 1000.0f;
-    //     }
-    // }else{
-    //     geo->target_flywheel_rpm = 60.0f;
-    // }
+    const float PITCH_MTR_MINIMUM = -2.1f;
+    const float PITCH_MTR_MAXIMUM = -1.2f;
+    geo->mtr_pitch_pos = -fmotor.pitch.precise_position;
+    geo->mtr_pitch_vel = fmotor.pitch.speed;
+
+    float min_pitch_vel = linear_map(geo->mtr_pitch_pos,
+        PITCH_MTR_MINIMUM, PITCH_MTR_MINIMUM + 0.2f, 0.05f, -3.0f);
+
+    float max_pitch_vel = linear_map(geo->mtr_pitch_pos,
+        PITCH_MTR_MAXIMUM - 0.2f, PITCH_MTR_MAXIMUM, 3.0f, -0.05f);
+
+    float V_pitch = gimbal_ctrl.gimbal_pitch_omega*1e-3f;
+    V_pitch = fmaxf(min_pitch_vel, V_pitch);
+    V_pitch = fminf(max_pitch_vel, V_pitch);
+
+    geo->abs_pitch_pos = imu_data.pitch;
+    geo->abs_pitch_vel = imu_data.gyro[1]*DEGtoRAD;
+
+    geo->abs_yaw_pos = imu_data.yaw;
+    geo->abs_yaw_vel = imu_data.gyro[2]*DEGtoRAD;
+
+    float input_yaw_vel = gimbal_ctrl.gimbal_yaw_omega*1e-3f;
+    // geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
+    geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 1.0f)*0.7f;
+
+    geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->abs_yaw_pos), CTRL_DELTA_T);
+    // geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + input_yaw_vel;
+
+    float T_yaw = pid_cycle(&g_yaw_vel_pid, geo->target_yaw_vel - geo->abs_yaw_vel, CTRL_DELTA_T);
+
+
+    if(BTB_ONLINE){
+        if(gimbal_ctrl.flywheel_enabled){
+            geo->target_flywheel_rpm = 3800.0f;            
+        }else{
+            geo->target_flywheel_rpm = 800.0f;
+        }
+    }else{
+        geo->target_flywheel_rpm = 60.0f;
+    }
 
             // geo->target_pitch_vel = pid_cycle(&f_pitch_pos_pid, 
             //     2.0f*DEGtoRAD - geo->mtr_pitch_pos, CTRL_DELTA_T);
@@ -414,39 +461,43 @@ void role_controller_step(const float CTRL_DELTA_T){
     float Tfly_2 = pid_cycle(&flywheel_2_pid, -geo->target_flywheel_rpm - fmotor.flywheel_2.speed, CTRL_DELTA_T);
     float Tfly_3 = pid_cycle(&flywheel_3_pid, geo->target_flywheel_rpm - fmotor.flywheel_3.speed, CTRL_DELTA_T);
 
+    
+    
     uint8_t tx_buffer[8];
-    // fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(
-    //     tx_buffer,
-    //     Tfly_1*(1/M3508_TORQUE_CONSTANT),
-    //     Tfly_2*(1/M3508_TORQUE_CONSTANT),
-    //     Tfly_3*(1/M3508_TORQUE_CONSTANT),
-    //     0.0f
-    // ), 8);
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(
+        tx_buffer,
+        Tfly_1*(1/M3508_TORQUE_CONSTANT),
+        Tfly_2*(1/M3508_TORQUE_CONSTANT),
+        Tfly_3*(1/M3508_TORQUE_CONSTANT),
+        0.0f
+    ), 8);
 
     if(BTB_ONLINE){
-        g2b_A.gimbal_request_T_yaw = (int16_t)(1e3f * 0.0f);
-        // fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
+        g2b_A.gimbal_request_T_yaw = (int16_t)limit_val((1e3f * T_yaw), 32700.0f);
+        fdcanx_send_data(&hfdcan1, G2B_MSG_A_ID, (uint8_t *)&g2b_A, 8);
     }
 
-    // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
-    //     set_torque_X4_36(motors.pitch.tranmitbuf, -geo->T_pitch), 8);
+    fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
+        set_speed_MyAct(motors.pitch.tranmitbuf, -V_pitch*RADtoDEG, 50), 8);
 
     fdcanx_send_data(&hfdcan3, MYACT_CTRLID_ALL, 
         acquire_motor_angle_MyAct(motors.pitch.tranmitbuf), 8);
 
     vofa.val[0]=-fmotor.flywheel_1.speed;
-    // vofa.val[1]=(float)b2g_B.feeder_push;
 
-    vofa.val[2]=geo->mtr_fold_pos;
+    vofa.val[1]=gimbal_ctrl.gimbal_yaw_omega*1e-3f;
+    vofa.val[2]=gimbal_ctrl.gimbal_pitch_omega*1e-3f;
+
     vofa.val[3]=geo->mtr_pitch_pos;
-
-    // vofa.val[4]=vision_FromRos.packet.v_yaw*RADtoDEG;
-    vofa.val[5]=geo->mtr_pitch_vel;
+    vofa.val[4]=geo->mtr_pitch_vel;
     
+    vofa.val[5]=V_pitch;
+    vofa.val[6]=(float)gimbal_ctrl.flywheel_enabled;
     // vofa.val[6]=predict_distence;
 
-    // vofa.val[7]=predict_pitch;
-    vofa.val[8]=geo->abs_pitch_pos;
+    vofa.val[7]=geo->abs_yaw_vel;
+    vofa.val[8]=geo->abs_yaw_pos;
+    vofa.val[9]=geo->target_yaw_pos;
     // vofa.val[9]=geo->abs_pitch_pos - predict_pitch;
 }
 
@@ -462,14 +513,8 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case 0x203:
         parse_feedback_M3508(msg, &motors.flywheel_3);
         break;
-    case 0x204:
-        parse_feedback_M3508(msg, &motors.feeder_top);
-        break;
     case MYACT_RPTID+0x5: 
         parse_feedback_X4_36(msg, &motors.pitch);
-        break;
-    case MYACT_RPTID+0x6:
-        parse_feedback_X4_36(msg, &motors.fold);
         break;
     case B2G_MSG_A_ID:
         gimbal_ctrl_input_t* ctrl_msg = (void *)msg;
