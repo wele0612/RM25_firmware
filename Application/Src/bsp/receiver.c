@@ -49,6 +49,9 @@ void parse_DR16_receiver_msg(receiver_DBUS_t* dr16, uint8_t* msg){
     dr16->mouse.press_l_edge_event = (press_l != dr16->mouse.press_l);
     dr16->mouse.press_r_edge_event = (press_r != dr16->mouse.press_r);
 
+    dr16->mouse.press_l = press_l;
+    dr16->mouse.press_r = press_r;
+
     dr16->key.v_edge_event = dr16->key.v ^ key_v;
 
     dr16->key.v = key_v;
