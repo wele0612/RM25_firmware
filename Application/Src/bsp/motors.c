@@ -314,6 +314,7 @@ void parse_feedback_M0603A(uint8_t *msg, report_M0603A_t *rpt){
                 break;
 
             case M0603A_CTRLID_TURN_FEEDBACK:
+                ;
                 int16_t speed = ((int16_t)msg[2] << 8) | msg[3];
                 rpt->speed = speed*(0.1f*2*3.141592653f/60.0f);
 

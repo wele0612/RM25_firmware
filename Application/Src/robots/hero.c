@@ -569,6 +569,7 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         parse_feedback_X4_36(msg, &motors.pitch);
         break;
     case B2G_MSG_A_ID:
+        ;
         gimbal_ctrl_input_t* ctrl_msg = (void *)msg;
         if (ctrl_msg->gimbal_use_VTM_not_dr16){
             gimbal_ctrl.gimbal_use_VTM_not_dr16 = 1;
@@ -578,6 +579,7 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         BTB_UPDATE_CNTDOWN();
         break;
     default:
+        ;
         volatile int a=ID;
         volatile uint8_t temp[8];
         memcpy(temp, msg, 8);
