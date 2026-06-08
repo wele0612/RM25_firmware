@@ -19,7 +19,7 @@ typedef struct __attribute__((packed)){
     uint8_t minipc_online : 1; // If mini PC is online
     uint8_t chasis_yaw_follow : 1; // If enable chasis yaw follow
     uint8_t RSVD0 : 1;
-
+    
     uint8_t RSVD1;
 
 }chasis_ctrl_input_t;

@@ -76,14 +76,14 @@ PID_t body_yaw_pos_pid={
 };
 
 PID_t agi_vel_pid={
-    .P = 5.0f,
-    .I = 60.0f,
+    .P = 1.3f,
+    .I = 50.0f,
     .D = 0.0f,
-    .integral_max = 0.05f
+    .integral_max = 0.07f
 };
 
 PID_t agi_pos_pid={
-    .P = 16.0f,
+    .P = 40.0f,
     .I = 0.0f,
     .D = 0.0f,
     .integral_max = 0.1f
@@ -97,6 +97,14 @@ const float gimbal_standby_position = 68.4f*DEGtoRAD;
 */
 int enable_folding_fixed_gimbal = 0;
 
+static enum{
+    HERO_AGI_INIT,
+    HERO_AGI_IDLE,
+    HERO_AGI_PUSHING
+}agi_state = HERO_AGI_INIT;
+
+static int prev_shoot_clicked = 0;
+
 void role_controller_step(const float CTRL_DELTA_T){
     robot_ctrl_t *geo = &robot_geo;
     robot_motors_t fmotor;
@@ -106,6 +114,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(HAL_GetTick() % 1000){
         fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
+        fdcanx_send_data(&hfdcan3, AGI_CTRLID, enable_DM_Joint(motors.agi.tranmitbuf), 8);
     }
 
     float m_power = geo->measured_current*geo->measured_voltage;
@@ -174,7 +183,54 @@ void role_controller_step(const float CTRL_DELTA_T){
         }
     }else{
         geo->target_vyaw = 0.0f;
+    }  
+
+    geo->agi_pos = fmotor.agi.position;
+    geo->agi_vel = fmotor.agi.speed;
+
+    // geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
+    int agi_in_position = (fabsf(wrap_to_pi(geo->target_agi_pos - geo->agi_pos)) < (10.0f*DEGtoRAD));
+
+    int shoot_is_posedge = (chasis_ctrl.fire_pressed && (!prev_shoot_clicked));
+    prev_shoot_clicked = chasis_ctrl.fire_pressed;
+
+    if(!referee.robot_status_0x0201.power_management_shooter_output){
+        agi_state = HERO_AGI_INIT;
     }
+    
+    switch (agi_state) {
+        case HERO_AGI_INIT:
+            geo->target_agi_pos = geo->agi_pos;
+            if(referee.robot_status_0x0201.power_management_shooter_output && shoot_is_posedge){
+                agi_state = HERO_AGI_IDLE;
+            }
+            break;
+
+        case HERO_AGI_IDLE:
+            geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
+            if(shoot_is_posedge){
+                agi_state = HERO_AGI_PUSHING;
+                geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos + PI/3.0f);
+            }
+            break;
+
+        case HERO_AGI_PUSHING:
+            if(agi_in_position){
+                agi_state = HERO_AGI_IDLE;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    // geo->target_agi_pos = unit_step_generator((float)(HAL_GetTick()%2000), 1000.0f)*1.5f;
+    geo->target_agi_vel = pid_cycle(&agi_pos_pid, wrap_to_pi(geo->target_agi_pos - geo->agi_pos), CTRL_DELTA_T);
+    
+    // geo->target_agi_vel = unit_step_generator((float)(HAL_GetTick()%2000), 1000.0f)*3.0f;
+    geo->target_agi_vel = limit_val(geo->target_agi_vel, 30.0f);
+    geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
+
 
     geo->F_x = pid_cycle(&body_x_vel_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
     geo->F_y = pid_cycle(&body_y_vel_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
@@ -233,7 +289,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, set_torque_DM4310(motors.yaw.tranmitbuf, geo->T_yaw), 8);
 
-    geo->T_agi=0.0f;
+    // geo->T_agi=0.0f;
     fdcanx_send_data(&hfdcan3, AGI_CTRLID, set_torque_DM4310(motors.agi.tranmitbuf, geo->T_agi), 8);
 
     float estimated_total_power = 0.0f;
@@ -249,10 +305,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     ob_fy = ob_fy*(1.0f-ob_alpha) + geo->F_y*ob_alpha;
     vofa.val[0]=sqrtf(imu_data.acc[0]*imu_data.acc[0] +
         imu_data.acc[1]*imu_data.acc[1] + imu_data.acc[2]*imu_data.acc[2]);
-    vofa.val[1]=imu_data.roll*RADtoDEG;
-    vofa.val[2]=imu_data.pitch*RADtoDEG;
+    vofa.val[1]=geo->agi_pos;
+    vofa.val[2]=geo->target_agi_pos;
 
-    vofa.val[3]=fmotor.yaw.position;
+    vofa.val[3]=chasis_ctrl.fire_pressed;
     // vofa.val[0] = fmotor.wheel_LF.current;
     // vofa.val[1] = fmotor.wheel_LB.current;
     // vofa.val[2] = fmotor.wheel_RF.current;
@@ -262,8 +318,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[5]=geo->vyaw_gyro*(60.0f/(2.0f*PI));
 
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
-    vofa.val[7]=(float)(g2b_A.gimbal_request_T_yaw*1e-3f);
-    vofa.val[8]=chasis_ctrl.robot_forward_v*1e-3f;
+    vofa.val[7]=dr16.mouse.x;
+    vofa.val[8]=dr16.key.v;
     vofa.val[9]=geo->measured_power;
 }
 

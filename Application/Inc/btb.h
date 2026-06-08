@@ -16,7 +16,11 @@
 
 typedef struct __attribute__((packed)) {
     int16_t gimbal_request_T_yaw; // 1e-3 Nm/LSB
-    uint8_t PAD[6];
+
+    uint8_t autoaim_can_fire : 1; // When auto aim says it's good time to shoot
+    uint8_t RSVD : 7;
+    
+    uint8_t PAD[5];
 }g2b_A_t;
 __BTB_VAR g2b_A_t g2b_A;
 #define G2B_MSG_A_ID 0x10

@@ -80,7 +80,7 @@ void dr16_on_change(){
 
         int swap_head_tail = 0;
 
-        chasis_ctrl.fire_pressed = 0;
+        chasis_ctrl.fire_pressed = dr16.mouse.press_l;
         chasis_ctrl.spintop_level = (dr16.s2 == DR16_SWITCH_UP) ? 1:0;
         chasis_ctrl.supercap_discharge = 0;
         chasis_ctrl.swap_head_tail = swap_head_tail;
