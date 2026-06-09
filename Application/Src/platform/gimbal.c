@@ -38,7 +38,7 @@ void controller_cycle(const float CTRL_DELTA_T){
 
         #ifdef REVERSE_PITCH
         toRos->pitch = imu_data.pitch;
-        toRos->pitch_vel = imu_data.gyro[1];
+        toRos->pitch_vel = imu_data.gyro[1]*DEGtoRAD;
         #else
         // Note: ROS and ICM42688 has opposite defination for Pitch
         toRos->pitch = -imu_data.pitch; 
@@ -63,6 +63,8 @@ void controller_cycle(const float CTRL_DELTA_T){
             HAL_UART_Transmit_DMA(AIMING_UART, vision_ToRos_buf, VISION_TO_ROS_SIZE);
         }
     }
+
+    HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, gimbal_ctrl.fired ? SET : RESET);
     
     // Upload chasis control commands
     memcpy(&g2b_B.chasis_ctrl, &chasis_ctrl, sizeof(chasis_ctrl_input_t));

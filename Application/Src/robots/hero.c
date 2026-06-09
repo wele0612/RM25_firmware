@@ -229,8 +229,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     
     // geo->target_agi_vel = unit_step_generator((float)(HAL_GetTick()%2000), 1000.0f)*3.0f;
     geo->target_agi_vel = limit_val(geo->target_agi_vel, 30.0f);
-    geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
 
+    geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
 
     geo->F_x = pid_cycle(&body_x_vel_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
     geo->F_y = pid_cycle(&body_y_vel_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
@@ -431,16 +431,6 @@ void role_controller_init(){
 
 }
 
-// void dr16_on_change(){
-//     // robot_ctrl_t *geo = &robot_geo;
-
-//     // if(dr16.s2 == DR16_SWITCH_MID && dr16.previous.s2 == DR16_SWITCH_DOWN){
-//     //     geo->feeder_position = 0.0f;
-//     //     geo->target_feeder_position = 1.7f;
-//     // }
-    
-// }
-
 /* For X4-36, need to first set VEL_P to 0.015, VEL_I to 0.00005 */
 /* Also need to increase X4-36 max acceleration */
 void role_controller_step(const float CTRL_DELTA_T){
@@ -471,19 +461,49 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->abs_yaw_pos = imu_data.yaw;
     geo->abs_yaw_vel = imu_data.gyro[2]*DEGtoRAD;
 
+    int gimbal_controlled_by_vision = 
+        (gimbal_ctrl.gimbal_control_mode == 2) 
+        && vision_online() 
+        && vision_FromRos.packet.mode != 0;
+
     float input_yaw_vel = gimbal_ctrl.gimbal_yaw_omega*1e-3f;
-    geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
-    // geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 1.0f)*0.7f;
+    float yaw_vel_feedforward;
+    float yaw_acc_feedforward;
+    
+    if(gimbal_controlled_by_vision){
+        geo->target_yaw_pos = vision_FromRos.packet.yaw;
+        yaw_vel_feedforward = vision_FromRos.packet.yaw_vel;
+        yaw_acc_feedforward = vision_FromRos.packet.yaw_acc;
+    }else{
+        // geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 1.0f)*0.7f;
+        geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
+        yaw_vel_feedforward = input_yaw_vel;
+        yaw_acc_feedforward = 0.0f;
+    }
+
+    // For safety. Gimbal will not suddently move after reconnected to base.
     if(!BTB_ONLINE){
         geo->target_yaw_pos = geo->abs_yaw_pos;
     }
-    geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->abs_yaw_pos), CTRL_DELTA_T);
-    geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + input_yaw_vel;
 
+    geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->abs_yaw_pos), CTRL_DELTA_T);
+    geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + yaw_vel_feedforward;
+
+    // For safety. If vision send weird positions, stop rotating after switch to regular mode
+    if(gimbal_controlled_by_vision){ geo->target_yaw_pos = geo->abs_yaw_pos; } 
+    
     // geo->target_yaw_vel = unit_step_generator(input_yaw_vel, 1.0f)*1.2f;
 
     float T_yaw = pid_cycle(&g_yaw_vel_pid, geo->target_yaw_vel - geo->abs_yaw_vel, CTRL_DELTA_T);
-
+    
+    // Gimbal inertia characterizaion
+    // if(input_yaw_vel > 1.0f){
+    //     T_yaw = cosf(HAL_GetTick()*1e-3f*6.0f*PI)*2.0f;
+    // }else{
+    //     T_yaw = 0.0f;
+    // }
+    const float GIMBAL_YAW_INERTIA = 0.1f; // kg*m^2
+    T_yaw += yaw_acc_feedforward * (GIMBAL_YAW_INERTIA * 0.8f);
 
     if(BTB_ONLINE){
         if(gimbal_ctrl.flywheel_enabled){
@@ -495,14 +515,6 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_flywheel_rpm = 60.0f;
     }
 
-            // geo->target_pitch_vel = pid_cycle(&f_pitch_pos_pid, 
-            //     2.0f*DEGtoRAD - geo->mtr_pitch_pos, CTRL_DELTA_T);
-            
-            // limit_val(geo->target_pitch_vel, 1.5f);
-            // fdcanx_send_data(&hfdcan3, MYACT_CTRLID_SINGLE+0x5, 
-            //     set_speed_MyAct(motors.pitch.tranmitbuf, -geo->target_pitch_vel*RADtoDEG, 0), 8);
-
-
     const float GIMBAL_WEIGHT = 4.0f;
     const float GIMBAL_CENTRE_OF_MASS_DISTENCE = 0.12f;
     float gravity_feedforward = cosf(geo->abs_pitch_pos)*(9.81f*GIMBAL_WEIGHT*GIMBAL_CENTRE_OF_MASS_DISTENCE);
@@ -513,7 +525,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     float Tfly_2 = pid_cycle(&flywheel_2_pid, -geo->target_flywheel_rpm - fmotor.flywheel_2.speed, CTRL_DELTA_T);
     float Tfly_3 = pid_cycle(&flywheel_3_pid, geo->target_flywheel_rpm - fmotor.flywheel_3.speed, CTRL_DELTA_T);
 
-    
     
     uint8_t tx_buffer[8];
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(
@@ -543,7 +554,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[3]=geo->mtr_pitch_pos;
     vofa.val[4]=geo->mtr_pitch_vel;
     
-    vofa.val[5]=V_pitch;
+    vofa.val[5]=vision_FromRos.packet.yaw;
     vofa.val[6]=geo->target_yaw_vel;
     // vofa.val[6]=predict_distence;
 

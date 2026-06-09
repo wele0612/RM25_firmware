@@ -39,7 +39,9 @@ typedef struct __attribute__((packed)){
     
     uint8_t swap_head_tail : 1; // Turn 180 deg to escape
     uint8_t flywheel_enabled : 1; // Flywheel
-    uint8_t RSVD0 : 3; 
+    uint8_t fired : 1; // Projectile launched. Use this bit for aiming purpose
+
+    uint8_t RSVD0 : 2;
 
     uint8_t RSVD1;
 

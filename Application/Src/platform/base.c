@@ -58,7 +58,6 @@ void dr16_on_change(){
         }
         int swap_head_tail = 0;
 
-        chasis_ctrl.fire_pressed = dr16.mouse.press_l;
         chasis_ctrl.spintop_level = 0;
         chasis_ctrl.supercap_discharge = 0;
         chasis_ctrl.swap_head_tail = swap_head_tail;
@@ -69,7 +68,6 @@ void dr16_on_change(){
         gimbal_ctrl.gimbal_mouse_yaw_omega = dr16.mouse.x*-mouse_gimbal_control_sensitivity;
 
         gimbal_ctrl.swap_head_tail = swap_head_tail;
-        gimbal_ctrl.gimbal_control_mode = dr16.mouse.press_r ? 2:1;
         gimbal_ctrl.flywheel_enabled = 1;
         
     #endif
@@ -80,7 +78,6 @@ void dr16_on_change(){
 
         int swap_head_tail = 0;
 
-        chasis_ctrl.fire_pressed = dr16.mouse.press_l;
         chasis_ctrl.spintop_level = (dr16.s2 == DR16_SWITCH_UP) ? 1:0;
         chasis_ctrl.supercap_discharge = 0;
         chasis_ctrl.swap_head_tail = swap_head_tail;
@@ -90,9 +87,12 @@ void dr16_on_change(){
         gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
 
         gimbal_ctrl.swap_head_tail = swap_head_tail;
-        gimbal_ctrl.gimbal_control_mode = 1;
         gimbal_ctrl.flywheel_enabled = (dr16.s1 == DR16_SWITCH_UP);
     #endif
+        chasis_ctrl.fire_pressed = dr16.mouse.press_l;
+
+        gimbal_ctrl.fired = chasis_ctrl.fire_pressed;
+        gimbal_ctrl.gimbal_control_mode = dr16.mouse.press_r ? 2:1;
 
     #endif
 

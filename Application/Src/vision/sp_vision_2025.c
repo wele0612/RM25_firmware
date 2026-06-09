@@ -15,7 +15,10 @@ static enum vision_recv_states_list_t{
 size_t vision_ptr=0;
 RosToMcuData_t vision_buf;
 
+static uint32_t vision_last_recv = 0;
+
 static void vision_on_recv(){
+    vision_last_recv = HAL_GetTick();
     return;
 }
 
@@ -72,6 +75,11 @@ void ypr_to_spvision_q(float yaw, float pitch, float roll, float *q){
     q[1] = cy * cp * sr - sy * sp * cr;
     q[2] = cy * sp * cr + sy * cp * sr;
     q[3] = sy * cp * cr - cy * sp * sr;
+}
+
+int vision_online(){
+    const int VISION_TIMEOUT = 50;
+    return (HAL_GetTick() - vision_last_recv) <= VISION_TIMEOUT;
 }
 
 #endif

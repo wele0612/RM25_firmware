@@ -134,12 +134,11 @@ typedef union {
     McuToRosPacket_t packet;
 } McuToRosData_t;
 
-
 void vision_recv_byte(uint8_t data);
 
 uint8_t *vision_send_pack(McuToRosData_t *toRos);
 
-
+int vision_online();
 
 #endif
 
