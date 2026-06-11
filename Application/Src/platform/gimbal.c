@@ -18,22 +18,18 @@ void controller_init(){
 
 void controller_cycle(const float CTRL_DELTA_T){
     role_controller_step(CTRL_DELTA_T);
-
-    // if(vision_FromRos.packet.tracking){
-    //     if((HAL_GetTick()%480) > 240){
-    //         buzzer_set_freq(TUNE_D6_SHARP_E6_FLAT);
-    //     }else{
-    //         buzzer_set_freq(TUNE_B6);
-    //     }
-    //     buzzer_on();
-    // }else{
-    //     buzzer_off();
-    // }
     
     if(HAL_GetTick()%2 == 0){ // 500Hz
         McuToRosPacket_t* toRos = &(vision_ToRos.packet);
         toRos->aim_color = 0;
-        toRos->bullet_speed = 25.0f;
+
+        float bullet_speed_referee = b2g_A.gimbal_ctrl.feedback_shoot_speed*1e-3f;
+        if(bullet_speed_referee > 10.0f){
+            toRos->bullet_speed = bullet_speed_referee;
+        }else{
+            toRos->bullet_speed = 15.0f;
+        }
+        
         toRos->mode = SP25_AUTO_AIM;
 
         #ifdef REVERSE_PITCH
@@ -46,16 +42,18 @@ void controller_cycle(const float CTRL_DELTA_T){
         #endif
 
         float yaw_diff = imu_data.yaw - toRos->yaw;
-        if(yaw_diff > PI){
-            toRos->yaw += yaw_diff - (2.0f*PI);
-        }else if(yaw_diff < -PI){
-            toRos->yaw += yaw_diff + (2.0f*PI);
-        }else{
-            toRos->yaw += yaw_diff;
-        }
+        // // float yaw_diff = b2g_B.gimbal_mtr_yaw_pos*1e-4f - toRos->yaw;
+        // if(yaw_diff > PI){
+        //     toRos->yaw += yaw_diff - (2.0f*PI);
+        // }else if(yaw_diff < -PI){
+        //     toRos->yaw += yaw_diff + (2.0f*PI);
+        // }else{
+        //     toRos->yaw += yaw_diff;
+        // }
+        toRos->yaw = imu_data.yaw;
         toRos->yaw_vel = imu_data.gyro[2]*DEGtoRAD;
 
-        ypr_to_spvision_q(imu_data.yaw, toRos->pitch, imu_data.roll, toRos->q);
+        ypr_to_spvision_q(toRos->yaw, toRos->pitch, imu_data.roll, toRos->q);
 
         HAL_UART_StateTypeDef state = HAL_UART_GetState(AIMING_UART);
         if (state == HAL_UART_STATE_READY || state == HAL_UART_STATE_BUSY_RX){

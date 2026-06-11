@@ -292,6 +292,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     // geo->T_agi=0.0f;
     fdcanx_send_data(&hfdcan3, AGI_CTRLID, set_torque_DM4310(motors.agi.tranmitbuf, geo->T_agi), 8);
 
+    b2g_B.gimbal_mtr_yaw_pos = (int16_t)(wrap_to_pi(fmotor.yaw.position)*1e4f);
+    fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
+
     float estimated_total_power = 0.0f;
     estimated_total_power += m3508_estimate_power(chasis_currents[0], motors.wheel_LF.speed*RPMtoRADS);
     estimated_total_power += m3508_estimate_power(chasis_currents[1], motors.wheel_LB.speed*RPMtoRADS);
@@ -406,9 +409,9 @@ PID_t feeder_1_vel_pid={
 // }; 
 
 PID_t g_pitch_pos_pid={
-    .P=12.0f,
+    .P=17.0f,
     .I=0.0f,
-    .D=0.0f,
+    .D=0.2f,
     .integral_max=0.01f
 };
 
@@ -445,18 +448,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->mtr_pitch_pos = -fmotor.pitch.precise_position;
     geo->mtr_pitch_vel = fmotor.pitch.speed;
 
-    float min_pitch_vel = linear_map(geo->mtr_pitch_pos,
-        PITCH_MTR_MINIMUM, PITCH_MTR_MINIMUM + 0.2f, 0.05f, -3.0f);
-
-    float max_pitch_vel = linear_map(geo->mtr_pitch_pos,
-        PITCH_MTR_MAXIMUM - 0.2f, PITCH_MTR_MAXIMUM, 3.0f, -0.05f);
-
-    float V_pitch = gimbal_ctrl.gimbal_pitch_omega*1e-3f;
-    V_pitch = fmaxf(min_pitch_vel, V_pitch);
-    V_pitch = fminf(max_pitch_vel, V_pitch);
-
-    geo->abs_pitch_pos = imu_data.pitch;
-    geo->abs_pitch_vel = imu_data.gyro[1]*DEGtoRAD;
+    geo->abs_pitch_pos = -imu_data.pitch;
+    geo->abs_pitch_vel = -imu_data.gyro[1]*DEGtoRAD;
 
     geo->abs_yaw_pos = imu_data.yaw;
     geo->abs_yaw_vel = imu_data.gyro[2]*DEGtoRAD;
@@ -466,28 +459,66 @@ void role_controller_step(const float CTRL_DELTA_T){
         && vision_online() 
         && vision_FromRos.packet.mode != 0;
 
+    float input_pitch_vel = gimbal_ctrl.gimbal_pitch_omega*1e-3f;
     float input_yaw_vel = gimbal_ctrl.gimbal_yaw_omega*1e-3f;
+
     float yaw_vel_feedforward;
     float yaw_acc_feedforward;
+    float pitch_vel_feedforward;
+    float pitch_acc_feedforward;
     
     if(gimbal_controlled_by_vision){
+        geo->target_pitch_pos = -vision_FromRos.packet.pitch;
+        pitch_vel_feedforward = -vision_FromRos.packet.pitch_vel;
+        pitch_acc_feedforward = -vision_FromRos.packet.pitch_acc;
+
         geo->target_yaw_pos = vision_FromRos.packet.yaw;
         yaw_vel_feedforward = vision_FromRos.packet.yaw_vel;
         yaw_acc_feedforward = vision_FromRos.packet.yaw_acc;
     }else{
-        // geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 1.0f)*0.7f;
+        // geo->target_pitch_pos = unit_step_generator(input_pitch_vel, 1.0f)*0.3f;
+        geo->target_pitch_pos += input_pitch_vel*CTRL_DELTA_T;
+        pitch_vel_feedforward = input_pitch_vel;
+        // pitch_vel_feedforward = 0.0f;
+        pitch_acc_feedforward = 0.0f;
+
         geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
         yaw_vel_feedforward = input_yaw_vel;
         yaw_acc_feedforward = 0.0f;
     }
 
+    float pitch_pos_err = geo->target_pitch_pos - geo->abs_pitch_pos;
+
+    const float down_range = geo->mtr_pitch_pos - PITCH_MTR_MINIMUM;
+    const float up_range = PITCH_MTR_MAXIMUM - geo->mtr_pitch_pos;
+
+    if(geo->target_pitch_pos < geo->abs_pitch_pos - down_range){
+        geo->target_pitch_pos = geo->abs_pitch_pos - down_range;
+    }else if(geo->target_pitch_pos > geo->abs_pitch_pos + up_range){
+        geo->target_pitch_pos = geo->abs_pitch_pos + up_range;
+    }
+
+    float min_pitch_vel = linear_map(geo->mtr_pitch_pos,
+        PITCH_MTR_MINIMUM, PITCH_MTR_MINIMUM + 0.2f, 0.05f, -3.0f);
+
+    float max_pitch_vel = linear_map(geo->mtr_pitch_pos,
+        PITCH_MTR_MAXIMUM - 0.2f, PITCH_MTR_MAXIMUM, 3.0f, -0.05f);
+
     // For safety. Gimbal will not suddently move after reconnected to base.
     if(!BTB_ONLINE){
         geo->target_yaw_pos = geo->abs_yaw_pos;
+        geo->target_pitch_pos = geo->abs_pitch_pos;
     }
 
     geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->abs_yaw_pos), CTRL_DELTA_T);
     geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + yaw_vel_feedforward;
+
+    float V_pitch;
+    V_pitch = pid_cycle(&g_pitch_pos_pid, wrap_to_pi(geo->target_pitch_pos - geo->abs_pitch_pos), CTRL_DELTA_T);
+    V_pitch += pitch_vel_feedforward;
+    
+    V_pitch = fmaxf(min_pitch_vel, V_pitch);
+    V_pitch = fminf(max_pitch_vel, V_pitch);
 
     // For safety. If vision send weird positions, stop rotating after switch to regular mode
     if(gimbal_controlled_by_vision){ geo->target_yaw_pos = geo->abs_yaw_pos; } 
@@ -503,7 +534,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     //     T_yaw = 0.0f;
     // }
     const float GIMBAL_YAW_INERTIA = 0.1f; // kg*m^2
-    T_yaw += yaw_acc_feedforward * (GIMBAL_YAW_INERTIA * 0.8f);
+    T_yaw += yaw_acc_feedforward * (GIMBAL_YAW_INERTIA * 1.0f);
 
     if(BTB_ONLINE){
         if(gimbal_ctrl.flywheel_enabled){
@@ -549,12 +580,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[0]=-fmotor.flywheel_1.speed;
 
     vofa.val[1]=gimbal_ctrl.gimbal_yaw_omega*1e-3f;
-    vofa.val[2]=gimbal_ctrl.gimbal_pitch_omega*1e-3f;
+    vofa.val[2]=up_range;
 
-    vofa.val[3]=geo->mtr_pitch_pos;
-    vofa.val[4]=geo->mtr_pitch_vel;
+    vofa.val[3]=down_range;
+    vofa.val[4]=geo->abs_pitch_pos;
     
-    vofa.val[5]=vision_FromRos.packet.yaw;
+    vofa.val[5]=geo->target_pitch_pos;
     vofa.val[6]=geo->target_yaw_vel;
     // vofa.val[6]=predict_distence;
 
@@ -588,6 +619,9 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
             memcpy(&gimbal_ctrl, msg, 8);
         }
         BTB_UPDATE_CNTDOWN();
+        break;
+    case B2G_MSG_B_ID:
+        memcpy(&b2g_B, msg, 8);
         break;
     default:
         ;
