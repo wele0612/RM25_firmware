@@ -62,7 +62,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     }else{
         geo->target_vy = chasis_ctrl.robot_forward_v*1e-3f;
         geo->target_vx = -chasis_ctrl.robot_leftward_v*1e-3f;
-        geo->target_vyaw = chasis_ctrl.robot_yaw_omega*1e-3f;
+        geo->target_vyaw = (-dr16.channel[2]*6.5f);
     }
 
 

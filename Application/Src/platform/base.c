@@ -90,9 +90,11 @@ void dr16_on_change(){
         gimbal_ctrl.flywheel_enabled = (dr16.s1 == DR16_SWITCH_UP);
     #endif
         chasis_ctrl.fire_pressed = dr16.mouse.press_l;
+        chasis_ctrl.custom_UI_drawcall = (dr16.key.v & DR16_KEY_R_BIT) ? 1:0;
 
         gimbal_ctrl.fired = chasis_ctrl.fire_pressed;
         gimbal_ctrl.gimbal_control_mode = dr16.mouse.press_r ? 2:1;
+        gimbal_ctrl.feedback_shoot_speed = (uint16_t)(referee.shoot_data_0x0207.initial_speed * 1e3f);
 
     #endif
 

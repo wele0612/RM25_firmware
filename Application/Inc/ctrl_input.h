@@ -18,7 +18,7 @@ typedef struct __attribute__((packed)){
     uint8_t swap_head_tail : 1; // Turn 180 deg to escape
     uint8_t minipc_online : 1; // If mini PC is online
     uint8_t chasis_yaw_follow : 1; // If enable chasis yaw follow
-    uint8_t RSVD0 : 1;
+    uint8_t custom_UI_drawcall : 1; // Request to redraw custom UI
     
     uint8_t RSVD1;
 
@@ -30,7 +30,7 @@ typedef struct __attribute__((packed)){
     int16_t gimbal_pitch_omega; // 1e-3 RAD/LSB
 
     // Projectile speed from referee system, 1e-3 m/(s*LSB)
-    int16_t feedback_shoot_speed; 
+    uint16_t feedback_shoot_speed; 
 
     // 0: Disable  1: Mouse  2: Auto-aim  3: Sentry
     uint8_t gimbal_control_mode : 2; 

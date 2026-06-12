@@ -321,8 +321,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[5]=geo->vyaw_gyro*(60.0f/(2.0f*PI));
 
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
-    vofa.val[7]=dr16.mouse.x;
-    vofa.val[8]=dr16.key.v;
+    vofa.val[7]=chasis_ctrl.custom_UI_drawcall;
+    vofa.val[8]=(dr16.key.v & DR16_KEY_R_BIT);
     vofa.val[9]=geo->measured_power;
 }
 
