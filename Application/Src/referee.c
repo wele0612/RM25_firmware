@@ -320,7 +320,7 @@ void draw_char(interaction_figure_t* fig,
     fig->details_b = char_length;
 }
 
-uint8_t r_send_buf[256];
+RAM_D2_SECTION uint8_t r_send_buf[256];
 uint8_t r_send_seq = 0;
 
 uint8_t* referee_send_data(uint16_t data_size, robot_interaction_data_t* data){

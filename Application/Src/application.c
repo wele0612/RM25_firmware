@@ -130,7 +130,7 @@ void referee_ui_update(int updata_level){
     const uint32_t referee_frame_delay = 40;
 
     robot_interaction_data_t ui_data;
-    uint16_t robot_id = 3;
+    uint16_t robot_id = referee.robot_status_0x0201.robot_id;
     ui_data.sender_id = robot_id;
     ui_data.receiver_id = get_client_id(robot_id);
 
@@ -147,7 +147,7 @@ void referee_ui_update(int updata_level){
 
     #define referee_send_frame() do{\
         send_buf = referee_send_data(6 + content_length, &ui_data);\
-        HAL_UART_Transmit(REFEREE_UART, send_buf, 15+content_length, 100);\
+        HAL_UART_Transmit_DMA(REFEREE_UART, send_buf, 15+content_length);\
         HAL_Delay(referee_frame_delay);\
         }while(0);
 
