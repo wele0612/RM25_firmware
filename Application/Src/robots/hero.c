@@ -579,10 +579,10 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     vofa.val[0]=-fmotor.flywheel_1.speed;
 
-    vofa.val[1]=gimbal_ctrl.gimbal_yaw_omega*1e-3f;
-    vofa.val[2]=up_range;
+    vofa.val[1]=vtm.key.v;
+    vofa.val[2]=vtm.mode_sw;
 
-    vofa.val[3]=down_range;
+    vofa.val[3]=vtm.channel[0];
     vofa.val[4]=geo->abs_pitch_pos;
     
     vofa.val[5]=geo->target_pitch_pos;

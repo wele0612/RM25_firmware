@@ -32,10 +32,13 @@ Bit7 -- Ctrl 键
 #define DR16_KEY_V_BIT (1U << 14)
 #define DR16_KEY_B_BIT (1U << 15)
 
-
 #define DR16_SWITCH_UP (0x1)
 #define DR16_SWITCH_MID (0x3)
 #define DR16_SWITCH_DOWN (0x2)
+
+#define VTM_SW_CINE     (0x0)
+#define VTM_SW_NORMAL   (0x1)
+#define VTM_SW_SPORT    (0x2)
 
 #define DR16_EDGE_NONE (0U)
 #define DR16_EDGE_RISE (1U)
@@ -69,5 +72,46 @@ typedef struct receiver_DBUS_t{
 int DR16_acquire_key_edge(receiver_DBUS_t *dr16, uint16_t KEY);
 
 void parse_DR16_receiver_msg(receiver_DBUS_t *dr16, uint8_t *msg);
+
+
+typedef struct receiver_VTM_t{
+    float channel[4];   
+    float wheel;
+    int8_t mode_sw;
+
+    struct{
+        int8_t pause;
+        int8_t s1;
+        int8_t s2;
+        int8_t trigger;
+
+        int8_t pause_event;
+        int8_t s1_event;
+        int8_t s2_event;
+        int8_t trigger_event;
+    } buttons;
+
+    struct{
+        int16_t x;
+        int16_t y;
+        int16_t z;
+        uint8_t press_l;
+        uint8_t press_r;
+        uint8_t press_mid;
+
+        uint8_t press_l_edge_event;
+        uint8_t press_r_edge_event;
+        uint8_t press_mid_edge_event;
+    } mouse;
+
+    struct
+    {
+        uint16_t v;
+        uint16_t v_edge_event;
+    } key;
+}receiver_VTM_t;
+
+void VTM_recv_byte(receiver_VTM_t* vtm, uint8_t data);
+void VTM_on_change();
 
 #endif

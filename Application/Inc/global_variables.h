@@ -36,12 +36,14 @@ __GLOBAL_VAR robot_ctrl_t robot_geo;
 #define DR16_UART &huart5
 __GLOBAL_VAR receiver_DBUS_t dr16;
 
+#define VTM_UART &huart8
+__GLOBAL_VAR receiver_VTM_t vtm;
+
 __GLOBAL_VAR imu_data_t imu_data;
 
 #define REFEREE_UART &huart1
 __GLOBAL_VAR Referee_info_t referee;
 __GLOBAL_VAR Referee_info_t referee_prev;
-
 
 #define AIMING_UART &huart10
 

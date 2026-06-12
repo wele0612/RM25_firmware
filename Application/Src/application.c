@@ -19,6 +19,7 @@ timeout_monitor_t timeout;
 RAM_D2_SECTION uint8_t dr16_buffer_recv[32]; // 18 bytes total
 RAM_D2_SECTION uint8_t referee_dma_buf[32];
 RAM_D2_SECTION uint8_t aiming_dma_buf[32];
+RAM_D2_SECTION uint8_t vtm_dma_buf[32];
 
 RAM_D2_SECTION robot_VOFA_report_t vofa = {.tail  = VOFA_TAIL};
 
@@ -58,6 +59,8 @@ void robot_init(){
     __HAL_UART_ENABLE_IT(REFEREE_UART, UART_IT_IDLE);
     HAL_UART_Receive_DMA(AIMING_UART, aiming_dma_buf, 32);
     __HAL_UART_ENABLE_IT(AIMING_UART, UART_IT_IDLE);
+    HAL_UART_Receive_DMA(VTM_UART, vtm_dma_buf, 32);
+    __HAL_UART_ENABLE_IT(VTM_UART, UART_IT_IDLE);
 
     while(icm_init() != 0); //Init IMU
     robot_readconfig(&robot_config); //Read from flash
@@ -272,11 +275,16 @@ void robot_step(const float CTRL_DELTA_T){
 void robot_loop(){
     //HAL_Delay(2000);
     //why_play_harunokage();
-    referee_ui_update(2);
+    if(chasis_ctrl.custom_UI_drawcall){
+        referee_ui_update(0);
+    }else{
+        referee_ui_update(2);
+    }
 }
 
 static uint16_t referee_dma_read_idx = 0;
 static uint16_t aiming_dma_read_idx = 0;
+static uint16_t vtm_dma_read_idx = 0;
 
 #define PROCESS_CIRCULAR_DMA(huart, buf, read_idx, recv_fn) do{ \
     uint16_t ndtr = __HAL_DMA_GET_COUNTER((huart)->hdmarx); \
@@ -306,6 +314,13 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart, HAL_UART_RxEventTypeTypeD
         #ifdef CONFIG_ENABLE_VISION
         PROCESS_CIRCULAR_DMA(huart, aiming_dma_buf, aiming_dma_read_idx, vision_recv_byte);
         #endif
+    }else if(huart == VTM_UART){
+        uint16_t ndtr = __HAL_DMA_GET_COUNTER(huart->hdmarx);
+        uint16_t write_idx = 32 - ndtr;
+        while(vtm_dma_read_idx != write_idx){
+            VTM_recv_byte(&vtm, vtm_dma_buf[vtm_dma_read_idx]);
+            vtm_dma_read_idx = (vtm_dma_read_idx + 1) % 32;
+        }
     }
 
 }
@@ -341,6 +356,13 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){
 		HAL_UART_DMAStop(AIMING_UART);
 		HAL_UART_Receive_DMA(AIMING_UART, aiming_dma_buf, 32);
 		__HAL_UART_ENABLE_IT(AIMING_UART, UART_IT_IDLE);
+	}
+	else if(huart == VTM_UART)
+	{
+		__HAL_UNLOCK(huart);
+		HAL_UART_DMAStop(VTM_UART);
+		HAL_UART_Receive_DMA(VTM_UART, vtm_dma_buf, 32);
+		__HAL_UART_ENABLE_IT(VTM_UART, UART_IT_IDLE);
 	}
 }
 
