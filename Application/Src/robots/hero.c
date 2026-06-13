@@ -173,7 +173,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->target_vx = -chasis_ctrl.robot_leftward_v*1e-3f;
     geo->target_vy = chasis_ctrl.robot_forward_v*1e-3f;
     // geo->target_vyaw = chasis_ctrl.robot_yaw_omega*1e-3f;
-    if(BTB_ONLINE && remote_online()){
+    if(BTB_ONLINE && control_online()){
         if(chasis_ctrl.chasis_yaw_follow){
             float body_ori_err = -wrap_to_pi(body_yaw_offset);
             geo->target_vyaw = pid_cycle(&body_yaw_pos_pid, body_ori_err, CTRL_DELTA_T);
@@ -293,6 +293,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan3, AGI_CTRLID, set_torque_DM4310(motors.agi.tranmitbuf, geo->T_agi), 8);
 
     b2g_B.gimbal_mtr_yaw_pos = (int16_t)(wrap_to_pi(fmotor.yaw.position)*1e4f);
+    b2g_B.feedback_shoot_speed = (int16_t)(referee.shoot_data_0x0207.initial_speed*1e3f);
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
     float estimated_total_power = 0.0f;
@@ -312,17 +313,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[2]=geo->target_agi_pos;
 
     vofa.val[3]=chasis_ctrl.fire_pressed;
-    // vofa.val[0] = fmotor.wheel_LF.current;
-    // vofa.val[1] = fmotor.wheel_LB.current;
-    // vofa.val[2] = fmotor.wheel_RF.current;
-    // vofa.val[3] = fmotor.wheel_RB.current;
-
     vofa.val[4]=geo->vy;
     vofa.val[5]=geo->vyaw_gyro*(60.0f/(2.0f*PI));
 
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
     vofa.val[7]=chasis_ctrl.custom_UI_drawcall;
-    vofa.val[8]=(dr16.key.v & DR16_KEY_R_BIT);
+    vofa.val[8]=0;
     vofa.val[9]=geo->measured_power;
 }
 
@@ -352,10 +348,8 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         BTB_UPDATE_CNTDOWN();
         break;
     case G2B_MSG_B_ID:
-        #ifndef CONFIG_BASE_HAS_CONTROL
         memcpy(&chasis_ctrl, msg, 8);
-        BTB_UPDATE_CNTDOWN();
-        #endif
+        control_timeout_update();
         break;
     case 0x391:
         // handle for voltage
@@ -505,7 +499,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         PITCH_MTR_MAXIMUM - 0.2f, PITCH_MTR_MAXIMUM, 3.0f, -0.05f);
 
     // For safety. Gimbal will not suddently move after reconnected to base.
-    if(!BTB_ONLINE){
+    if(!BTB_ONLINE || !control_online()){
         geo->target_yaw_pos = geo->abs_yaw_pos;
         geo->target_pitch_pos = geo->abs_pitch_pos;
     }
@@ -536,7 +530,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float GIMBAL_YAW_INERTIA = 0.1f; // kg*m^2
     T_yaw += yaw_acc_feedforward * (GIMBAL_YAW_INERTIA * 1.0f);
 
-    if(BTB_ONLINE){
+    if(BTB_ONLINE && control_online()){
         if(gimbal_ctrl.flywheel_enabled){
             geo->target_flywheel_rpm = 3800.0f;            
         }else{
@@ -610,18 +604,19 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case MYACT_RPTID+0x5: 
         parse_feedback_X4_36(msg, &motors.pitch);
         break;
-    case B2G_MSG_A_ID:
-        ;
-        gimbal_ctrl_input_t* ctrl_msg = (void *)msg;
-        if (ctrl_msg->gimbal_use_VTM_not_dr16){
-            gimbal_ctrl.gimbal_use_VTM_not_dr16 = 1;
-        }else{
-            memcpy(&gimbal_ctrl, msg, 8);
-        }
-        BTB_UPDATE_CNTDOWN();
-        break;
+    // case B2G_MSG_A_ID:
+    //     ;
+    //     gimbal_ctrl_input_t* ctrl_msg = (void *)msg;
+    //     if (ctrl_msg->gimbal_use_VTM_not_dr16){
+    //         gimbal_ctrl.gimbal_use_VTM_not_dr16 = 1;
+    //     }else{
+    //         memcpy(&gimbal_ctrl, msg, 8);
+    //     }
+    //     BTB_UPDATE_CNTDOWN();
+    //     break;
     case B2G_MSG_B_ID:
         memcpy(&b2g_B, msg, 8);
+        BTB_UPDATE_CNTDOWN();
         break;
     default:
         ;

@@ -29,21 +29,15 @@ typedef struct __attribute__((packed)){
     int16_t gimbal_yaw_omega; // 1e-3 RAD/LSB
     int16_t gimbal_pitch_omega; // 1e-3 RAD/LSB
 
-    // Projectile speed from referee system, 1e-3 m/(s*LSB)
-    uint16_t feedback_shoot_speed; 
-
     // 0: Disable  1: Mouse  2: Auto-aim  3: Sentry
     uint8_t gimbal_control_mode : 2; 
-
-    uint8_t gimbal_use_VTM_not_dr16 : 1;
     
     uint8_t swap_head_tail : 1; // Turn 180 deg to escape
     uint8_t flywheel_enabled : 1; // Flywheel
-    uint8_t fired : 1; // Projectile launched. Use this bit for aiming purpose
 
-    uint8_t RSVD0 : 2;
+    uint8_t RSVD0 : 4;
 
-    uint8_t RSVD1;
+    uint8_t RSVD1[3];
 
 }gimbal_ctrl_input_t;
 static_assert(sizeof(gimbal_ctrl_input_t) == 8U, "Must be 8 bytes");

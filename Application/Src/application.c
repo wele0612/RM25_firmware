@@ -268,7 +268,6 @@ void robot_step(const float CTRL_DELTA_T){
 
     HAL_UART_Transmit_DMA(&huart7, (void *)&vofa, sizeof(vofa));
 
-    //HAL_UART_Transmit_IT(&huart7, (void *)&(vofa), sizeof(vofa));
     //HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
 }
 
@@ -301,12 +300,7 @@ void robot_UART_msgcallback(UART_HandleTypeDef *huart, HAL_UART_RxEventTypeTypeD
         if(event == HAL_UART_RXEVENT_HT) return;
 
         HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32); // 接收完毕后重启
-
         parse_DR16_receiver_msg(&dr16, dr16_buffer_recv);
-
-        timeout.last_remote_tick=HAL_GetTick();
-        //HAL_UART_Transmit_DMA(&huart1, (uint8_t *)dr16.msg, 18);
-        dr16_on_change();
 
     }else if(huart == REFEREE_UART){
         PROCESS_CIRCULAR_DMA(huart, referee_dma_buf, referee_dma_read_idx, referee_recv_byte);

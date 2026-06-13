@@ -2,6 +2,24 @@
 #include <stdint.h>
 
 #include <utils.h>
+#include <main.h>
+
+// ------------------ General -----------------
+static int control_last_recv_tick=0;
+void control_timeout_update(){
+    control_last_recv_tick = HAL_GetTick();
+}
+
+const int CONTROL_TIMEOUT = 100;
+int control_online(){
+    return (HAL_GetTick() - control_last_recv_tick) < CONTROL_TIMEOUT;
+}
+
+// ------------------- DR16 -------------------
+static int dr16_last_recv_tick=0;
+
+__attribute__((weak)) void DR16_on_change(){
+}
 
 int DR16_acquire_key_edge(receiver_DBUS_t* dr16, uint16_t KEY){
     int has_event = DR16_EDGE_NONE;
@@ -54,12 +72,22 @@ void parse_DR16_receiver_msg(receiver_DBUS_t* dr16, uint8_t* msg){
     dr16->mouse.press_l = press_l;
     dr16->mouse.press_r = press_r;
 
-    dr16->key.v_edge_event = dr16->key.v ^ key_v;
+    dr16->key.v_edge_event |= dr16->key.v ^ key_v;
 
     dr16->key.v = key_v;
+
+    dr16_last_recv_tick = HAL_GetTick();
+    DR16_on_change();
+}
+
+const int DR16_TIMEOUT = 100;
+int DR16_online(){
+    return (HAL_GetTick() - dr16_last_recv_tick) < DR16_TIMEOUT;
 }
 
 // ------------------- VTM -------------------
+
+static int vtm_last_recv_tick=0;
 
 typedef struct __attribute__((packed)){
     uint8_t sof_1;
@@ -139,8 +167,11 @@ static void VTM_parse_data(receiver_VTM_t* vtm, VTM_data_t* data){
     vtm->mouse.press_r   = press_r;
     vtm->mouse.press_mid = press_mid;
 
-    vtm->key.v_edge_event = vtm->key.v ^ key_v;
+    vtm->key.v_edge_event |= vtm->key.v ^ key_v;
     vtm->key.v = key_v;
+
+    vtm_last_recv_tick = HAL_GetTick();
+    VTM_on_change();
 }
 
 void VTM_recv_byte(receiver_VTM_t* vtm, uint8_t data){
@@ -162,9 +193,13 @@ void VTM_recv_byte(receiver_VTM_t* vtm, uint8_t data){
         uint16_t packet_crc16 = ((VTM_data_t *)vtm_buf)->crc16;
         if(packet_crc16 == crc16){
             VTM_parse_data(vtm, (VTM_data_t *)vtm_buf);
-            VTM_on_change();
         }
         vtm_recv_fsm = RECV_IDLE;
         vtm_ptr = 0;
     }
+}
+
+const int VTM_TIMEOUT = 100;
+int VTM_online(){
+    return (HAL_GetTick() - vtm_last_recv_tick) < VTM_TIMEOUT;
 }

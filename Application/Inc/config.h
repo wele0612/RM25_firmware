@@ -15,10 +15,8 @@
 #define CONFIG_AIM_SP_VISION_25
 // #define CONFIG_AIM_RM_VISION
 
-//========= Choose Control Input ===========
-#define CONFIG_INPUT_DR16
-// #define CONFIG_INPUT_VTM_LINK
-// #define CONFIG_INPUT_AUTO_SENTRY
+//========= Choose Auto Sentry ===========
+// #define CONFIG_AUTO_SENTRY
 
 //========= Choose Control Method ===========
 // #define CONFIG_KEYBOARD_CONTROL

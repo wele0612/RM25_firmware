@@ -14,23 +14,23 @@ Bit5 -- E 键
 Bit6 -- Shift 键
 Bit7 -- Ctrl 键
 */
-#define DR16_KEY_W_BIT  (1U << 0)
-#define DR16_KEY_S_BIT  (1U << 1)
-#define DR16_KEY_A_BIT  (1U << 2)
-#define DR16_KEY_D_BIT  (1U << 3)
-#define DR16_KEY_SHIFT_BIT  (1U << 4)
-#define DR16_KEY_CTRL_BIT   (1U << 5)
-#define DR16_KEY_Q_BIT  (1U << 6)
-#define DR16_KEY_E_BIT  (1U << 7)
+#define KEYBOARD_W_BIT  (1U << 0)
+#define KEYBOARD_S_BIT  (1U << 1)
+#define KEYBOARD_A_BIT  (1U << 2)
+#define KEYBOARD_D_BIT  (1U << 3)
+#define KEYBOARD_SHIFT_BIT  (1U << 4)
+#define KEYBOARD_CTRL_BIT   (1U << 5)
+#define KEYBOARD_Q_BIT  (1U << 6)
+#define KEYBOARD_E_BIT  (1U << 7)
 
-#define DR16_KEY_R_BIT (1U << 8)
-#define DR16_KEY_F_BIT (1U << 9)
-#define DR16_KEY_G_BIT (1U << 10)
-#define DR16_KEY_Z_BIT (1U << 11)
-#define DR16_KEY_X_BIT (1U << 12)
-#define DR16_KEY_C_BIT (1U << 13)
-#define DR16_KEY_V_BIT (1U << 14)
-#define DR16_KEY_B_BIT (1U << 15)
+#define KEYBOARD_R_BIT (1U << 8)
+#define KEYBOARD_F_BIT (1U << 9)
+#define KEYBOARD_G_BIT (1U << 10)
+#define KEYBOARD_Z_BIT (1U << 11)
+#define KEYBOARD_X_BIT (1U << 12)
+#define KEYBOARD_C_BIT (1U << 13)
+#define KEYBOARD_V_BIT (1U << 14)
+#define KEYBOARD_B_BIT (1U << 15)
 
 #define DR16_SWITCH_UP (0x1)
 #define DR16_SWITCH_MID (0x3)
@@ -44,23 +44,26 @@ Bit7 -- Ctrl 键
 #define DR16_EDGE_RISE (1U)
 #define DR16_EDGE_FALL (2U)
 
+typedef struct mouse_state_t{
+    int16_t x;
+    int16_t y;
+    int16_t z;
+    uint8_t press_l;
+    uint8_t press_r;
+    uint8_t press_mid;
+
+    uint8_t press_l_edge_event;
+    uint8_t press_r_edge_event;
+    uint8_t press_mid_edge_event;
+}mouse_state_t;
+
 typedef struct receiver_DBUS_t{
     float channel[4];
     int8_t s1; // {Up, Mid, Down}={1,3,2}
     int8_t s2; // {Up, Mid, Down}={1,3,2}
     float thumbwheel;
 
-    struct
-    {
-        int16_t x;
-        int16_t y;
-        int16_t z;
-        uint8_t press_l;
-        uint8_t press_r;
-
-        uint8_t press_l_edge_event;
-        uint8_t press_r_edge_event;
-    } mouse;
+    mouse_state_t mouse;
     struct
     {
         uint16_t v;
@@ -69,10 +72,14 @@ typedef struct receiver_DBUS_t{
 
 }receiver_DBUS_t;
 
+void control_timeout_update();
+int control_online();
+
+void DR16_on_change();
+
 int DR16_acquire_key_edge(receiver_DBUS_t *dr16, uint16_t KEY);
-
 void parse_DR16_receiver_msg(receiver_DBUS_t *dr16, uint8_t *msg);
-
+int DR16_online();
 
 typedef struct receiver_VTM_t{
     float channel[4];   
@@ -91,18 +98,7 @@ typedef struct receiver_VTM_t{
         int8_t trigger_event;
     } buttons;
 
-    struct{
-        int16_t x;
-        int16_t y;
-        int16_t z;
-        uint8_t press_l;
-        uint8_t press_r;
-        uint8_t press_mid;
-
-        uint8_t press_l_edge_event;
-        uint8_t press_r_edge_event;
-        uint8_t press_mid_edge_event;
-    } mouse;
+    mouse_state_t mouse;
 
     struct
     {
@@ -112,6 +108,7 @@ typedef struct receiver_VTM_t{
 }receiver_VTM_t;
 
 void VTM_recv_byte(receiver_VTM_t* vtm, uint8_t data);
+int VTM_online();
 void VTM_on_change();
 
 #endif
