@@ -171,7 +171,7 @@ void referee_ui_update(int updata_level){
         content_length = sizeof(ext_client_custom_character_t);
 
         memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
-        const char* helloworld = "CTRL + Q  TURN";
+        const char* helloworld = "PRESS  Q  SPINTOP";
         strcpy((char *)ui_data.user_data.char_graphic.char_data, helloworld);
         draw_char(&(ui_data.user_data.char_graphic.graphic_data), "ct1", ui_element_op, 3,
             COLOR_GREEN, 2, 80, 820, 16, sizeof(helloworld));
@@ -187,10 +187,18 @@ void referee_ui_update(int updata_level){
         referee_send_frame();
 
         memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
-        const char* str3 = "D  RESET UI";
+        const char* str3 = "R  RESET UI";
         strcpy((char *)ui_data.user_data.char_graphic.char_data, str3);
         draw_char(&(ui_data.user_data.char_graphic.graphic_data), "ct3", ui_element_op, 3,
             COLOR_GREEN, 2, 192, 760, 16, sizeof(str3));
+
+        referee_send_frame();
+
+        memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
+        const char* str4 = "X  TURNBACK";
+        strcpy((char *)ui_data.user_data.char_graphic.char_data, str4);
+        draw_char(&(ui_data.user_data.char_graphic.graphic_data), "ct4", ui_element_op, 3,
+            COLOR_GREEN, 2, 192, 730, 16, sizeof(str3));
 
         referee_send_frame();
 
@@ -209,6 +217,11 @@ void referee_ui_update(int updata_level){
         draw_rectangle(&(ui_data.user_data.seven_graphics[1]), "sel", ui_element_op, 1,
             COLOR_PINK, 6, 181, 795, 182+32, 795+32);
 
+        draw_rectangle(&(ui_data.user_data.seven_graphics[2]), "aim", ui_element_op, 2,
+            chasis_ctrl.minipc_online ? COLOR_TEAM : COLOR_PURPLE, 5, 
+                1920/2 - 300, 1080/2 - 200, 
+                1920/2 + 300, 1080/2 + 200);
+
         send_buf = referee_send_data(6 + content_length, &ui_data);
 
         referee_send_frame();
@@ -219,7 +232,7 @@ void referee_ui_update(int updata_level){
 
     memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
 
-    const uint32_t gimbal_rotation_deg = HAL_GetTick()/10;
+    uint32_t gimbal_rotation_deg = (uint32_t)(wrap_to_2pi(b2g_B.gimbal_mtr_yaw_pos*1e-4f)*RADtoDEG);
 
     // 车体旋转位置的小条
     draw_arc(&(ui_data.user_data.seven_graphics[0]), "bdy", ui_element_op, 1,
@@ -227,8 +240,18 @@ void referee_ui_update(int updata_level){
         82, 82);
     
     //电容能量条
+    #ifdef CONFIG_PLATFORM_BASE
+
+    figure_color_t cap_color = COLOR_YELLOW;
+    if(supercap_online() && supercap.cap_state == CAP_ON){
+        cap_color = COLOR_GREEN;
+    }
+    draw_arc(&(ui_data.user_data.seven_graphics[1]), "cp", ui_element_op, 1, 
+        cap_color, 8, 960, 536, 219, 220+supercap.cap_energy_percentage, 340, 350);
+    #else
     draw_arc(&(ui_data.user_data.seven_graphics[1]), "cp", ui_element_op, 1, 
         COLOR_YELLOW, 8, 960, 536, 220, 320, 340, 350);
+    #endif
 
     //横准心
     draw_line(&(ui_data.user_data.seven_graphics[2]), "zxh", ui_element_op, 2,

@@ -163,7 +163,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->vyaw_wheel = vyaw_wheel*wheel_v_alpha + geo->vyaw_wheel*(1.0f-wheel_v_alpha);
 
     float body_yaw_offset = wrap_to_pi( -fmotor.yaw.position );
-
+    
     const float cosby = cosf(body_yaw_offset);
     const float sinby = sinf(body_yaw_offset);
 
@@ -276,7 +276,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     float boost_power = 0.0f;
     if(chasis_ctrl.supercap_discharge && supercap_online() && supercap.cap_state==CAP_ON){
-        boost_power = fminf(120.0f, supercap.max_discharge_power*1e-2f);
+        boost_power = fminf(150.0f, supercap.max_discharge_power*1e-2f);
     }
 
     float chasis_current_scaling = m3508_quadwheel_get_scaling(
@@ -499,8 +499,6 @@ void role_controller_step(const float CTRL_DELTA_T){
         yaw_acc_feedforward = 0.0f;
     }
 
-    float pitch_pos_err = geo->target_pitch_pos - geo->abs_pitch_pos;
-
     const float down_range = geo->mtr_pitch_pos - PITCH_MTR_MINIMUM;
     const float up_range = PITCH_MTR_MAXIMUM - geo->mtr_pitch_pos;
 
@@ -522,7 +520,12 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_pitch_pos = geo->abs_pitch_pos;
     }
 
-    geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(geo->target_yaw_pos - geo->abs_yaw_pos), CTRL_DELTA_T);
+    float yaw_pos_err =geo->target_yaw_pos - geo->abs_yaw_pos;
+    if(!gimbal_controlled_by_vision && gimbal_ctrl.swap_head_tail){
+        yaw_pos_err += PI;
+    }
+
+    geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(yaw_pos_err), CTRL_DELTA_T);
     geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + yaw_vel_feedforward;
 
     float V_pitch;

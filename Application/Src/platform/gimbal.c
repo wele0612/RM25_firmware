@@ -71,8 +71,8 @@ void controller_cycle(const float CTRL_DELTA_T){
     }
 }
 
-void process_keyboard(uint16_t key, uint16_t key_event, mouse_state_t* mouse){
-    const int16_t press_move_vel = (int16_t)(1.0f*1e3);
+void process_keyboard(uint16_t key, uint16_t* key_event, mouse_state_t* mouse){
+    const int16_t press_move_vel = (int16_t)(2.0f*1e3);
         const int16_t press_rotate_vel = (int16_t)(PI*1e3);
         int16_t accelerate_factor;
         if(key & KEYBOARD_SHIFT_BIT){
@@ -107,10 +107,14 @@ void process_keyboard(uint16_t key, uint16_t key_event, mouse_state_t* mouse){
             chasis_ctrl.robot_yaw_omega = 0;
         }
 
-        int swap_head_tail = 0;
+        int swap_head_tail = gimbal_ctrl.swap_head_tail;
 
+        if((key & KEYBOARD_X_BIT) && (*key_event & KEYBOARD_X_BIT)){ // posedge
+            swap_head_tail = swap_head_tail ? 0:1;
+            *key_event &= (~KEYBOARD_X_BIT);
+        }
+        
         chasis_ctrl.spintop_level = 0;
-        chasis_ctrl.swap_head_tail = swap_head_tail;
         chasis_ctrl.custom_UI_drawcall = (key & KEYBOARD_R_BIT) ? 1:0;
         chasis_ctrl.fire_pressed = mouse->press_l ? 1:0;
 
@@ -126,7 +130,7 @@ void process_keyboard(uint16_t key, uint16_t key_event, mouse_state_t* mouse){
 void remote_on_change(){
     // Priority: DR16 > Auto Sentry UART (Only when enabled) > VTM Link
     if(DR16_online()){
-        process_keyboard(dr16.key.v, dr16.key.v_edge_event, &dr16.mouse);
+        process_keyboard(dr16.key.v, &dr16.key.v_edge_event, &dr16.mouse);
 
         int use_joystick = (dr16.s1 == DR16_SWITCH_DOWN);
         if(use_joystick){
@@ -146,7 +150,7 @@ void remote_on_change(){
 
         control_timeout_update();
     }else if(VTM_online()){
-        process_keyboard(vtm.key.v, vtm.key.v_edge_event, &vtm.mouse);
+        process_keyboard(vtm.key.v, &vtm.key.v_edge_event, &vtm.mouse);
 
         int use_joystick = (vtm.mode_sw == VTM_SW_CINE);
         if(use_joystick){

@@ -15,10 +15,11 @@ typedef struct __attribute__((packed)){
     uint8_t supercap_discharge : 1; // Accelerate beyond power limit
     uint8_t spintop_level : 2; // Spintop speed = x*PI rad/s
     uint8_t fire_pressed : 1; // If the fire button is pressed
-    uint8_t swap_head_tail : 1; // Turn 180 deg to escape
     uint8_t minipc_online : 1; // If mini PC is online
     uint8_t chasis_yaw_follow : 1; // If enable chasis yaw follow
     uint8_t custom_UI_drawcall : 1; // Request to redraw custom UI
+
+    uint8_t RSVD0 : 1; // Turn 180 deg to escape
     
     uint8_t RSVD1;
 
