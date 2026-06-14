@@ -92,19 +92,19 @@ void parse_referee_msg(int full_frame_size, const uint8_t* frame_begin_ptr){
     switch(cmd_id){
         case 0x201:
             copy_dest_ptr = &(referee.robot_status_0x0201);
-            cmd_msg_size = 13;
+            cmd_msg_size = sizeof(referee.robot_status_0x0201);
             break;
         case 0x202:
             copy_dest_ptr = &(referee.power_heat_data_0x0202);
-            cmd_msg_size = 16;
+            cmd_msg_size = sizeof(referee.power_heat_data_0x0202);
             break;
         case 0x207:
             copy_dest_ptr = &(referee.shoot_data_0x0207);
-            cmd_msg_size = 7;
+            cmd_msg_size = sizeof(referee.shoot_data_0x0207);
             break;
         case 0x208:
             copy_dest_ptr = &(referee.projectile_allowance_0x0208);
-            cmd_msg_size = 6;
+            cmd_msg_size = sizeof(referee.projectile_allowance_0x0208);
             break;
     }
 

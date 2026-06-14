@@ -29,8 +29,7 @@ typedef struct __attribute__((packed)) {
     uint16_t reserved2;                  // 保留位
     float reserved3;                     // 保留位
     uint16_t buffer_energy;              // 缓冲能量（单位：J）
-    uint16_t shooter_17mm_1_barrel_heat; // 第1个17mm发射机构的射击热量
-    uint16_t shooter_17mm_2_barrel_heat; // 第2个17mm发射机构的射击热量
+    uint16_t shooter_17mm_barrel_heat;   // 17mm发射机构的射击热量
     uint16_t shooter_42mm_barrel_heat;   // 42mm发射机构的射击热量
 } power_heat_data_t;
 
@@ -44,9 +43,10 @@ typedef struct __attribute__((packed)) {
 
 // CMD 0x0208
 typedef struct __attribute__((packed)) {
-    uint16_t projectile_allowance_17mm; // 17mm弹丸允许发弹量
-    uint16_t projectile_allowance_42mm; // 42mm弹丸允许发弹量
-    uint16_t remaining_gold_coin;       // 剩余金币数量
+    uint16_t projectile_allowance_17mm;    // 17mm弹丸允许发弹量
+    uint16_t projectile_allowance_42mm;    // 42mm弹丸允许发弹量
+    uint16_t remaining_gold_coin;          // 剩余金币数量
+    uint16_t projectile_allowance_fortress; // 堡垒增益点提供的储备17mm弹丸允许发弹量；该值与机器人是否实际占领堡垒无关
 } projectile_allowance_t;
 
 // CMD 0x0301 -----------------------
