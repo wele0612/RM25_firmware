@@ -12,6 +12,7 @@
 #include <receiver.h>
 #include <icm42688.h>
 #include <referee.h>
+#include <supercap.h>
 
 typedef struct robot_VOFA_report_t{
     float val[10];
@@ -56,6 +57,12 @@ __GLOBAL_VAR gimbal_ctrl_input_t gimbal_ctrl;
 
 __GLOBAL_VAR McuToRosData_t vision_ToRos;
 __GLOBAL_VAR RosToMcuData_t vision_FromRos;
+
+#endif
+
+#ifdef CONFIG_PLATFORM_BASE
+
+__GLOBAL_VAR capcan_fromCap_t supercap;
 
 #endif
 

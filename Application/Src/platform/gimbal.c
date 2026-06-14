@@ -77,8 +77,10 @@ void process_keyboard(uint16_t key, uint16_t key_event, mouse_state_t* mouse){
         int16_t accelerate_factor;
         if(key & KEYBOARD_SHIFT_BIT){
             accelerate_factor = 3;
+            chasis_ctrl.supercap_discharge = 1;
         }else{
             accelerate_factor = 1;
+            chasis_ctrl.supercap_discharge = 0;
         }
 
         if(key & KEYBOARD_W_BIT){
@@ -108,7 +110,6 @@ void process_keyboard(uint16_t key, uint16_t key_event, mouse_state_t* mouse){
         int swap_head_tail = 0;
 
         chasis_ctrl.spintop_level = 0;
-        chasis_ctrl.supercap_discharge = 0;
         chasis_ctrl.swap_head_tail = swap_head_tail;
         chasis_ctrl.custom_UI_drawcall = (key & KEYBOARD_R_BIT) ? 1:0;
         chasis_ctrl.fire_pressed = mouse->press_l ? 1:0;
@@ -136,6 +137,7 @@ void remote_on_change(){
             chasis_ctrl.fire_pressed = 0;
             chasis_ctrl.chasis_yaw_follow = 0;
             chasis_ctrl.spintop_level = 0;
+            chasis_ctrl.supercap_discharge = 0;
 
             gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-dr16.channel[3]*2*PI*1e3f);
             gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
@@ -155,6 +157,7 @@ void remote_on_change(){
             chasis_ctrl.fire_pressed = vtm.buttons.trigger;
             chasis_ctrl.chasis_yaw_follow = 0;
             chasis_ctrl.spintop_level = 0;
+            chasis_ctrl.supercap_discharge = 0;
 
             gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-vtm.channel[2]*2*PI*1e3f);
             gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-vtm.channel[3]*2*PI*1e3f);

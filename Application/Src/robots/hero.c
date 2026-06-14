@@ -8,6 +8,7 @@
 #include<vision.h>
 
 #include<chasis_power.h>
+#include<supercap.h>
 
 #include<motors.h>
 #include<servo_pwm.h>
@@ -112,7 +113,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    if(HAL_GetTick() % 1000){
+    if(HAL_GetTick() % 500){
         fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
         fdcanx_send_data(&hfdcan3, AGI_CTRLID, enable_DM_Joint(motors.agi.tranmitbuf), 8);
     }
@@ -272,8 +273,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     float chasis_power_limit = (float)(referee.robot_status_0x0201.chassis_power_limit);
     if(chasis_power_limit > 200.0f ){ chasis_power_limit = 200.0f;}
     if(chasis_power_limit < 25.0f ){chasis_power_limit = 25.0f;}
+
+    float boost_power = 0.0f;
+    if(chasis_ctrl.supercap_discharge && supercap_online() && supercap.cap_state==CAP_ON){
+        boost_power = fminf(120.0f, supercap.max_discharge_power*1e-2f);
+    }
+
     float chasis_current_scaling = m3508_quadwheel_get_scaling(
-        chasis_currents, chasis_omegas, chasis_power_limit - 10.0f);
+        chasis_currents, chasis_omegas, chasis_power_limit - 10.0f + boost_power);
 
     uint8_t tx_buf[8];
     fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(tx_buf,
@@ -296,6 +303,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     b2g_B.feedback_shoot_speed = (int16_t)(referee.shoot_data_0x0207.initial_speed*1e3f);
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
+    capcan_toCap_t cap_msg;
+    cap_msg.power_target = (uint16_t)((chasis_power_limit - 10.0f)*100.0f);
+    cap_msg.referee_power = (uint16_t)chasis_power_limit;
+    cap_msg.rsvd1 = 0x2012;
+    cap_msg.rsvd2 = 0x0712;
+    fdcanx_send_data(&hfdcan1, CAPCAN_TOCAP_MSG_ID, (uint8_t *)&cap_msg, 8);
+
     float estimated_total_power = 0.0f;
     estimated_total_power += m3508_estimate_power(chasis_currents[0], motors.wheel_LF.speed*RPMtoRADS);
     estimated_total_power += m3508_estimate_power(chasis_currents[1], motors.wheel_LB.speed*RPMtoRADS);
@@ -313,12 +327,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[2]=geo->target_agi_pos;
 
     vofa.val[3]=chasis_ctrl.fire_pressed;
-    vofa.val[4]=geo->vy;
-    vofa.val[5]=geo->vyaw_gyro*(60.0f/(2.0f*PI));
 
+    vofa.val[4]=supercap.max_discharge_power*1e-2f;
+    vofa.val[5]=supercap.cap_state;
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
-    vofa.val[7]=chasis_ctrl.custom_UI_drawcall;
-    vofa.val[8]=0;
+    vofa.val[7]=supercap.cap_energy_percentage;
+    vofa.val[8]=supercap.base_power*1e-2f;
     vofa.val[9]=geo->measured_power;
 }
 
@@ -342,6 +356,10 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
         break;
     case AGI_FEEDBACKID:
         parse_feedback_DM4310(msg, &motors.agi, AGI_CTRLID);
+        break;
+    case CAPCAN_FROMCAP_MSG_ID:
+        memcpy(&supercap, msg, 8);
+        supercap_update_timeout();
         break;
     case G2B_MSG_A_ID:
         memcpy(&g2b_A, msg, 8);
