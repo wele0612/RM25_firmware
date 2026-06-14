@@ -152,3 +152,44 @@ void fdcan3_rx_callback(void)
 {
 	fdcanx_receive(&hfdcan3, rx_data3);
 }
+
+
+/**
+************************************************************************
+* @brief:      	check_and_recover_all_can(void)
+* @param:       void
+* @retval:     	void
+* @details:    	检查有无出现busoff等can问题，如有的话自动恢复CAN
+************************************************************************
+**/
+void check_and_recover_all_can(void){
+	FDCAN_ProtocolStatusTypeDef status;
+
+	// Check and recover FDCAN1
+	if(HAL_FDCAN_GetProtocolStatus(&hfdcan1, &status) == HAL_OK){
+		if(status.BusOff || status.ErrorPassive){
+			HAL_FDCAN_Stop(&hfdcan1);
+			HAL_FDCAN_Start(&hfdcan1);
+			HAL_FDCAN_ActivateNotification(&hfdcan1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+		}
+	}
+
+	// Check and recover FDCAN2
+	if(HAL_FDCAN_GetProtocolStatus(&hfdcan2, &status) == HAL_OK){
+		if(status.BusOff || status.ErrorPassive){
+			HAL_FDCAN_Stop(&hfdcan2);
+			HAL_FDCAN_Start(&hfdcan2);
+			HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+		}
+	}
+
+	// Check and recover FDCAN3
+	if(HAL_FDCAN_GetProtocolStatus(&hfdcan3, &status) == HAL_OK){
+		if(status.BusOff || status.ErrorPassive){
+			HAL_FDCAN_Stop(&hfdcan3);
+			HAL_FDCAN_Start(&hfdcan3);
+			HAL_FDCAN_ActivateNotification(&hfdcan3, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0);
+		}
+	}
+}
+

@@ -302,6 +302,7 @@ void robot_loop(){
     }else{
         referee_ui_update(2);
     }
+    check_and_recover_all_can();
 }
 
 static uint16_t referee_dma_read_idx = 0;

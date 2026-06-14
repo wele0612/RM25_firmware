@@ -16,5 +16,7 @@ void fdcan1_rx_callback(void);
 void fdcan2_rx_callback(void);
 void fdcan3_rx_callback(void);
 
+void check_and_recover_all_can(void);
+
 #endif /* __CAN_BSP_H_ */
 
