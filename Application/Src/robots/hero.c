@@ -180,12 +180,18 @@ void role_controller_step(const float CTRL_DELTA_T){
             geo->target_vyaw = pid_cycle(&body_yaw_pos_pid, body_ori_err, CTRL_DELTA_T);
             geo->target_vyaw = limit_val(geo->target_vyaw, 2.0f);
         }else if(chasis_ctrl.spin_mode == 2){
-            geo->target_vyaw = 1.5f*PI;
+            geo->target_vyaw = 2.0f*PI;
         }else if(chasis_ctrl.spin_mode == 3){
             if( fabsf(geo->target_vx)<= 0.2f && fabsf(geo->target_vy)<=0.2f ){
-                geo->target_vyaw = 3.0f*PI + cosf(1e-3f*HAL_GetTick()*PI*2.3f)*(PI);
+                geo->target_vyaw = 3.0f*PI 
+                    + cosf(1e-3f*HAL_GetTick()*PI*1.2f)*(PI*0.6f)
+                    + cosf(1e-3f*HAL_GetTick()*PI*3.0f)*(PI);
             }else{
-                geo->target_vyaw = 1.5f*PI;  
+                if(chasis_ctrl.supercap_discharge){
+                    geo->target_vyaw = 2.0f*PI;
+                }else{
+                    geo->target_vyaw = 3.0f*PI;
+                }
             }
         }else{
             geo->target_vyaw = 0.0f;
