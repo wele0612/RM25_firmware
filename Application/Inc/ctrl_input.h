@@ -13,13 +13,15 @@ typedef struct __attribute__((packed)){
     int16_t robot_yaw_omega; // 1e-3 RAD/LSB
 
     uint8_t supercap_discharge : 1; // Accelerate beyond power limit
-    uint8_t spintop_level : 2; // Spintop speed = x*PI rad/s
-    uint8_t fire_pressed : 1; // If the fire button is pressed
-    uint8_t minipc_online : 1; // If mini PC is online
-    uint8_t chasis_yaw_follow : 1; // If enable chasis yaw follow
-    uint8_t custom_UI_drawcall : 1; // Request to redraw custom UI
 
-    uint8_t RSVD0 : 1; // Turn 180 deg to escape
+    // 0: None. 1: Yaw follow 2: Spintop 3: Variable Spintop
+    uint8_t spin_mode : 2; // Spintop level.
+    uint8_t fire_pressed : 1; // If the fire button is pressed
+
+    uint8_t minipc_online : 1; // If mini PC is online
+    uint8_t vision_allow_fire : 1; // If vision allow shoot
+    uint8_t custom_UI_drawcall : 1; // Request to redraw custom UI
+    uint8_t bypass_shoot_heat_control : 1; // Ignore heat control and shoot. For emergency only.
     
     uint8_t RSVD1;
 

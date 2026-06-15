@@ -198,7 +198,15 @@ void referee_ui_update(int updata_level){
         const char* str4 = "X  TURNBACK";
         strcpy((char *)ui_data.user_data.char_graphic.char_data, str4);
         draw_char(&(ui_data.user_data.char_graphic.graphic_data), "ct4", ui_element_op, 3,
-            COLOR_GREEN, 2, 192, 730, 16, sizeof(str3));
+            COLOR_GREEN, 2, 192, 730, 16, sizeof(str4));
+
+        referee_send_frame();
+
+        memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
+        const char* str5 = "B  HOLD TO IGNORE HEAT";
+        strcpy((char *)ui_data.user_data.char_graphic.char_data, str5);
+        draw_char(&(ui_data.user_data.char_graphic.graphic_data), "ct5", ui_element_op, 3,
+            COLOR_GREEN, 2, 192, 700, 16, sizeof(str5));
 
         referee_send_frame();
 

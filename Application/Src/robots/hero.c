@@ -175,12 +175,20 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->target_vy = chasis_ctrl.robot_forward_v*1e-3f;
     // geo->target_vyaw = chasis_ctrl.robot_yaw_omega*1e-3f;
     if(BTB_ONLINE && control_online()){
-        if(chasis_ctrl.chasis_yaw_follow){
+        if(chasis_ctrl.spin_mode == 1){
             float body_ori_err = -wrap_to_pi(body_yaw_offset);
             geo->target_vyaw = pid_cycle(&body_yaw_pos_pid, body_ori_err, CTRL_DELTA_T);
             geo->target_vyaw = limit_val(geo->target_vyaw, 2.0f);
+        }else if(chasis_ctrl.spin_mode == 2){
+            geo->target_vyaw = 1.5f*PI;
+        }else if(chasis_ctrl.spin_mode == 3){
+            if( fabsf(geo->target_vx)<= 0.2f && fabsf(geo->target_vy)<=0.2f ){
+                geo->target_vyaw = 3.0f*PI + cosf(1e-3f*HAL_GetTick()*PI*2.3f)*(PI);
+            }else{
+                geo->target_vyaw = 1.5f*PI;  
+            }
         }else{
-            geo->target_vyaw = chasis_ctrl.spintop_level*PI;
+            geo->target_vyaw = 0.0f;
         }
     }else{
         geo->target_vyaw = 0.0f;
@@ -195,6 +203,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     int shoot_is_posedge = (chasis_ctrl.fire_pressed && (!prev_shoot_clicked));
     prev_shoot_clicked = chasis_ctrl.fire_pressed;
 
+    int heat_control_allow_shoot =
+        (referee.robot_status_0x0201.shooter_barrel_heat_limit
+        - referee.power_heat_data_0x0202.shooter_42mm_barrel_heat) >= 99
+        || chasis_ctrl.bypass_shoot_heat_control;
+    
     if(!referee.robot_status_0x0201.power_management_shooter_output){
         agi_state = HERO_AGI_INIT;
     }
@@ -209,7 +222,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
         case HERO_AGI_IDLE:
             geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
-            if(shoot_is_posedge){
+            if(shoot_is_posedge && heat_control_allow_shoot){
                 agi_state = HERO_AGI_PUSHING;
                 geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos + PI/3.0f);
             }
@@ -278,6 +291,9 @@ void role_controller_step(const float CTRL_DELTA_T){
     if(chasis_ctrl.supercap_discharge && supercap_online() && supercap.cap_state==CAP_ON){
         boost_power = fminf(150.0f, supercap.max_discharge_power*1e-2f);
     }
+    if(chasis_ctrl.spin_mode == 3){
+        boost_power += 10.0f;
+    }
 
     float chasis_current_scaling = m3508_quadwheel_get_scaling(
         chasis_currents, chasis_omegas, chasis_power_limit - 10.0f + boost_power);
@@ -304,7 +320,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
     capcan_toCap_t cap_msg;
-    cap_msg.power_target = (uint16_t)((chasis_power_limit - 10.0f)*100.0f);
+    cap_msg.power_target = (uint16_t)((chasis_power_limit - 3.0f)*100.0f);
     cap_msg.referee_power = (uint16_t)chasis_power_limit;
     cap_msg.rsvd1 = 0x2012;
     cap_msg.rsvd2 = 0x0712;
@@ -329,7 +345,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[3]=chasis_ctrl.fire_pressed;
 
     vofa.val[4]=supercap.max_discharge_power*1e-2f;
-    vofa.val[5]=supercap.cap_state;
+    vofa.val[5]=referee.projectile_allowance_0x0208.projectile_allowance_42mm;
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
     vofa.val[7]=supercap.cap_energy_percentage;
     vofa.val[8]=supercap.base_power*1e-2f;
@@ -553,7 +569,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(BTB_ONLINE && control_online()){
         if(gimbal_ctrl.flywheel_enabled){
-            geo->target_flywheel_rpm = 3800.0f;            
+            geo->target_flywheel_rpm = 3650.0f;            
         }else{
             geo->target_flywheel_rpm = 800.0f;
         }
