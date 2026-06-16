@@ -140,6 +140,20 @@ void referee_ui_update(int updata_level){
     const int x_offset = 0;
     const int y_offset = 50 - (HAL_GetTick()/10)%200;
 
+    const int firing_table[7][3]={ 
+        //  x   y   length   
+            3,-90,180,
+            3,-66, 120,
+            3,-58,70,
+            3,-63,45,
+            3,  -80,27,
+            3,  -100,20,
+            5,  -140,13
+        };
+        const char firing_table_names[7][3]={
+            "f0", "f1", "f2", "f3", "f4", "f5", "f6"
+        };
+
     size_t content_length;
     uint8_t *send_buf;
 
@@ -210,6 +224,23 @@ void referee_ui_update(int updata_level){
 
         referee_send_frame();
 
+        ui_data.data_cmd_id = CMD_DRAW_SEVEN_GRAPHICS;
+        content_length = sizeof(interaction_figure_t)*7;
+
+        memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
+
+        for(int i=0;i<7;i++){
+            draw_line(&(ui_data.user_data.seven_graphics[i]), firing_table_names[i], ui_element_op, 4,
+            (i<2) ? COLOR_YELLOW : COLOR_GREEN, 
+            2, 
+            1920/2 - firing_table[i][2]/2 + firing_table[i][0],
+            1080/2 + firing_table[i][1],
+            1920/2 + firing_table[i][2]/2 + firing_table[i][0],
+            1080/2 + firing_table[i][1]);
+        }
+
+        referee_send_frame();
+
     }
 
     if(updata_level <= 1){
@@ -219,18 +250,12 @@ void referee_ui_update(int updata_level){
         memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
         //竖准心
         draw_line(&(ui_data.user_data.seven_graphics[0]), "zxv", ui_element_op, 2,
-            COLOR_ORANGE, 1, 960 + x_offset, 1080/2 + 100,
-                960 + x_offset, 1080/2 - 200);
+            COLOR_ORANGE, 1, 960 + firing_table[3][0], 1080/2 + 100,
+                960 + firing_table[3][0], 1080/2 - 200);
 
         draw_rectangle(&(ui_data.user_data.seven_graphics[1]), "sel", ui_element_op, 1,
             COLOR_PINK, 6, 181, 795, 182+32, 795+32);
 
-        draw_rectangle(&(ui_data.user_data.seven_graphics[2]), "aim", ui_element_op, 2,
-            chasis_ctrl.minipc_online ? COLOR_TEAM : COLOR_PURPLE, 5, 
-                1920/2 - 300, 1080/2 - 200, 
-                1920/2 + 300, 1080/2 + 200);
-
-        send_buf = referee_send_data(6 + content_length, &ui_data);
 
         referee_send_frame();
     }
@@ -262,9 +287,9 @@ void referee_ui_update(int updata_level){
     #endif
 
     //横准心
-    draw_line(&(ui_data.user_data.seven_graphics[2]), "zxh", ui_element_op, 2,
-    COLOR_GREEN, 3, 960 - 30 + x_offset, 1080/2 + y_offset,
-        960 + 30 + x_offset, 1080/2 + y_offset);
+    // draw_line(&(ui_data.user_data.seven_graphics[2]), "zxh", ui_element_op, 2,
+    // COLOR_GREEN, 3, 960 - 30 + x_offset, 1080/2 + y_offset,
+    //     960 + 30 + x_offset, 1080/2 + y_offset);
 
     int avaliable_count,low_ammocount;
     if(referee.robot_status_0x0201.robot_id == 0x1 || referee.robot_status_0x0201.robot_id == 0x101){// 是英雄
@@ -283,6 +308,12 @@ void referee_ui_update(int updata_level){
     //CV当前的锁定目标
     draw_circle(&(ui_data.user_data.seven_graphics[4]), "cv", ui_element_op, 5,
         COLOR_GREEN, 2, 1920/2, 1080/2, 20);
+
+    // 自瞄范围的框
+    draw_rectangle(&(ui_data.user_data.seven_graphics[5]), "aim", ui_element_op, 2,
+        chasis_ctrl.minipc_online ? COLOR_TEAM : COLOR_PURPLE, 5, 
+            1920/2 - 300, 1080/2 - 230, 
+            1920/2 + 300, 1080/2 + 230);
 
     referee_send_frame();
 
