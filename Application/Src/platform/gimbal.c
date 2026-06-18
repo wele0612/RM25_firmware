@@ -27,7 +27,7 @@ void controller_cycle(const float CTRL_DELTA_T){
         if(bullet_speed_referee > 10.0f){
             toRos->bullet_speed = bullet_speed_referee;
         }else{
-            toRos->bullet_speed = 14.5f;
+            toRos->bullet_speed = 14.7f;
         }
         
         toRos->mode = SP25_AUTO_AIM;
@@ -52,6 +52,7 @@ void controller_cycle(const float CTRL_DELTA_T){
         // }
         toRos->yaw = imu_data.yaw;
         toRos->yaw_vel = imu_data.gyro[2]*DEGtoRAD;
+        toRos->aim_color = b2g_B.is_enemy_red ? 1:0;
 
         ypr_to_spvision_q(toRos->yaw, toRos->pitch, imu_data.roll, toRos->q);
 
@@ -67,7 +68,12 @@ void controller_cycle(const float CTRL_DELTA_T){
     // Upload chasis control commands
     if(control_online()){
         chasis_ctrl.minipc_online = vision_online() ? 1:0;
-        chasis_ctrl.vision_allow_fire = (vision_FromRos.packet.mode == 2)? 1:0;
+        if(gimbal_ctrl.gimbal_control_mode == 1){
+            chasis_ctrl.vision_allow_fire = 1;
+        }else{
+            chasis_ctrl.vision_allow_fire = (vision_FromRos.packet.mode == 2)? 1:0;
+        }
+
         memcpy(&g2b_B.chasis_ctrl, &chasis_ctrl, sizeof(chasis_ctrl_input_t));
         fdcanx_send_data(&hfdcan1, G2B_MSG_B_ID, (uint8_t *)&g2b_B, 8);
     }
@@ -109,12 +115,13 @@ void process_keyboard(uint16_t key, uint16_t* key_event, mouse_state_t* mouse){
         //     chasis_ctrl.robot_yaw_omega = 0;
         // }
 
-        int swap_head_tail = gimbal_ctrl.swap_head_tail;
+        // int swap_head_tail = gimbal_ctrl.swap_head_tail;
 
-        if((key & KEYBOARD_X_BIT) && (*key_event & KEYBOARD_X_BIT)){ // posedge
-            swap_head_tail = swap_head_tail ? 0:1;
-            *key_event &= (~KEYBOARD_X_BIT);
-        }
+        // if((key & KEYBOARD_X_BIT) && (*key_event & KEYBOARD_X_BIT)){ // posedge
+        //     swap_head_tail = swap_head_tail ? 0:1;
+        //     *key_event &= (~KEYBOARD_X_BIT);
+        // }
+        int swap_head_tail = (key & KEYBOARD_X_BIT) ? 1:0;
 
         if((key & KEYBOARD_Q_BIT) && (*key_event & KEYBOARD_Q_BIT)){
             if(chasis_ctrl.spin_mode != 3){
