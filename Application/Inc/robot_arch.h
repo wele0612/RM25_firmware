@@ -64,6 +64,9 @@
 
             float T_pitch;
             float T_yaw;
+
+            float input_pitch_vel;
+            float input_yaw_vel;
             
             // Gimbal Control Mode
             float target_pitch_vel;

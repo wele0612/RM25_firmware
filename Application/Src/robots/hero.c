@@ -206,8 +206,11 @@ void role_controller_step(const float CTRL_DELTA_T){
     // geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
     int agi_in_position = (fabsf(wrap_to_pi(geo->target_agi_pos - geo->agi_pos)) < (10.0f*DEGtoRAD));
 
-    int shoot_is_posedge = (chasis_ctrl.fire_pressed && (!prev_shoot_clicked));
-    prev_shoot_clicked = chasis_ctrl.fire_pressed;
+    int shoot_is_posedge = 0;
+    if(chasis_ctrl.vision_allow_fire){
+        shoot_is_posedge = (chasis_ctrl.fire_pressed && (!prev_shoot_clicked));
+        prev_shoot_clicked = chasis_ctrl.fire_pressed;
+    }
 
     int heat_control_allow_shoot =
         (referee.robot_status_0x0201.shooter_barrel_heat_limit
@@ -323,6 +326,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     b2g_B.gimbal_mtr_yaw_pos = (int16_t)(wrap_to_pi(fmotor.yaw.position)*1e4f);
     b2g_B.feedback_shoot_speed = (int16_t)(referee.shoot_data_0x0207.initial_speed*1e3f);
+    b2g_B.is_enemy_red = (referee.robot_status_0x0201.robot_id >= 100)? 1:0;
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
     capcan_toCap_t cap_msg;
@@ -443,23 +447,23 @@ PID_t feeder_1_vel_pid={
 // }; 
 
 PID_t g_pitch_pos_pid={
-    .P=17.0f,
+    .P=15.0f,
     .I=0.0f,
     .D=0.2f,
     .integral_max=0.01f
 };
 
 PID_t g_yaw_vel_pid={
-    .P=3.0f,
-    .I=30.0f,
-    .D=0.007f,
-    .integral_max=0.05f
+    .P=4.0f,
+    .I=20.0f,
+    .D=0.0f,
+    .integral_max=0.03f
 };
 
 PID_t g_yaw_pos_pid={
-    .P=22.0f,
+    .P=15.0f,
     .I=0.0f,
-    .D=0.7f,
+    .D=0.2f,
     .integral_max=0.01f
 };
 
@@ -467,6 +471,10 @@ PID_t g_yaw_pos_pid={
 void role_controller_init(){
 
 }
+
+static int turning_back=0;
+static uint32_t turnback_start_tick=0;
+static float turnback_end_pos;
 
 /* For X4-36, need to first set VEL_P to 0.015, VEL_I to 0.00005 */
 /* Also need to increase X4-36 max acceleration */
@@ -495,6 +503,10 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     float input_pitch_vel = gimbal_ctrl.gimbal_pitch_omega*1e-3f;
     float input_yaw_vel = gimbal_ctrl.gimbal_yaw_omega*1e-3f;
+    
+    const float input_gim_alpha = 0.05f;
+    geo->input_pitch_vel = (1.0f-input_gim_alpha)*geo->input_pitch_vel + input_gim_alpha*input_pitch_vel;
+    geo->input_yaw_vel = (1.0f-input_gim_alpha)*geo->input_yaw_vel + input_gim_alpha*input_yaw_vel;
 
     float yaw_vel_feedforward;
     float yaw_acc_feedforward;
@@ -509,16 +521,35 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_yaw_pos = vision_FromRos.packet.yaw;
         yaw_vel_feedforward = vision_FromRos.packet.yaw_vel;
         yaw_acc_feedforward = vision_FromRos.packet.yaw_acc;
+
+        turning_back = 0;
     }else{
         // geo->target_pitch_pos = unit_step_generator(input_pitch_vel, 1.0f)*0.3f;
-        geo->target_pitch_pos += input_pitch_vel*CTRL_DELTA_T;
-        pitch_vel_feedforward = input_pitch_vel;
+        geo->target_pitch_pos += geo->input_pitch_vel*CTRL_DELTA_T;
+        pitch_vel_feedforward = geo->input_pitch_vel;
         // pitch_vel_feedforward = 0.0f;
         pitch_acc_feedforward = 0.0f;
 
-        geo->target_yaw_pos += input_yaw_vel*CTRL_DELTA_T;
-        yaw_vel_feedforward = input_yaw_vel;
+        // geo->target_yaw_pos += geo->input_yaw_vel*CTRL_DELTA_T;
+        // geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 0.2f)*1.0f;
+        geo->target_yaw_pos = geo->abs_yaw_pos;
+        yaw_vel_feedforward = geo->input_yaw_vel;
         yaw_acc_feedforward = 0.0f;
+
+        if(gimbal_ctrl.swap_head_tail && !turning_back){
+            turning_back = 1;
+            turnback_end_pos = geo->abs_yaw_pos + PI;
+            turnback_start_tick = HAL_GetTick();
+        }else if(turning_back){
+            yaw_vel_feedforward = 6.0f;
+            
+            int turnback_completed = fabsf(wrap_to_pi(turnback_end_pos - geo->abs_yaw_pos)) < 0.2f;
+            int turnback_timeout = (HAL_GetTick() - turnback_start_tick) > 2000;
+            if(turnback_completed || turnback_timeout){
+                turning_back = 0;
+            }
+        }
+
     }
 
     const float down_range = geo->mtr_pitch_pos - PITCH_MTR_MINIMUM;
@@ -543,12 +574,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
 
     float yaw_pos_err =geo->target_yaw_pos - geo->abs_yaw_pos;
-    if(!gimbal_controlled_by_vision && gimbal_ctrl.swap_head_tail){
-        yaw_pos_err += PI;
-    }
+    // if(!gimbal_controlled_by_vision && gimbal_ctrl.swap_head_tail){
+    //     yaw_pos_err += PI;
+    // }
 
     geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(yaw_pos_err), CTRL_DELTA_T);
-    geo->target_yaw_vel = limit_val(geo->target_yaw_vel, 12.0f) + yaw_vel_feedforward;
+    geo->target_yaw_vel = limit_val(geo->target_yaw_vel + yaw_vel_feedforward, 12.0f);
 
     float V_pitch;
     V_pitch = pid_cycle(&g_pitch_pos_pid, wrap_to_pi(geo->target_pitch_pos - geo->abs_pitch_pos), CTRL_DELTA_T);
@@ -560,7 +591,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // For safety. If vision send weird positions, stop rotating after switch to regular mode
     if(gimbal_controlled_by_vision){ geo->target_yaw_pos = geo->abs_yaw_pos; } 
     
-    // geo->target_yaw_vel = unit_step_generator(input_yaw_vel, 1.0f)*1.2f;
+    // geo->target_yaw_vel = unit_step_generator(input_yaw_vel, 0.2f)*1.2f;
 
     float T_yaw = pid_cycle(&g_yaw_vel_pid, geo->target_yaw_vel - geo->abs_yaw_vel, CTRL_DELTA_T);
     
@@ -575,7 +606,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(BTB_ONLINE && control_online()){
         if(gimbal_ctrl.flywheel_enabled){
-            geo->target_flywheel_rpm = 3650.0f;            
+            geo->target_flywheel_rpm = 3675.0f;        
         }else{
             geo->target_flywheel_rpm = 800.0f;
         }
@@ -615,9 +646,11 @@ void role_controller_step(const float CTRL_DELTA_T){
         acquire_motor_angle_MyAct(motors.pitch.tranmitbuf), 8);
 
     vofa.val[0]=-fmotor.flywheel_1.speed;
+    vofa.val[1]=-fmotor.flywheel_2.speed;
+    vofa.val[2]=fmotor.flywheel_3.speed;
 
-    vofa.val[1]=vtm.key.v;
-    vofa.val[2]=vtm.mode_sw;
+    // vofa.val[1]=vision_FromRos.packet.yaw;
+    // vofa.val[2]=vision_online();
 
     vofa.val[3]=vtm.channel[0];
     vofa.val[4]=geo->abs_pitch_pos;
