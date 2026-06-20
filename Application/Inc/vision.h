@@ -87,6 +87,10 @@ typedef struct __attribute__((packed)) GimbalToVision
     float pitch_vel;
     float bullet_speed;
     uint16_t bullet_count;  // 子弹累计发送次数
+
+    uint16_t self_HP;
+    uint8_t match_started;
+
     uint16_t crc16;
 }McuToRosPacket_t; // 济瞄没用ROS，不过总之就叫这个名字吧
 

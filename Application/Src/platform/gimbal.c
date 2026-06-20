@@ -18,6 +18,12 @@ void controller_init(){
 
 void controller_cycle(const float CTRL_DELTA_T){
     role_controller_step(CTRL_DELTA_T);
+
+    if(control_online()){
+        ESTOP_reset();
+    }else{
+        ESTOP();
+    }
     
     if(HAL_GetTick()%2 == 0){ // 500Hz
         McuToRosPacket_t* toRos = &(vision_ToRos.packet);
@@ -41,16 +47,11 @@ void controller_cycle(const float CTRL_DELTA_T){
         toRos->pitch_vel = -imu_data.gyro[1]*DEGtoRAD;
         #endif
 
-        float yaw_diff = imu_data.yaw - toRos->yaw;
-        // // float yaw_diff = b2g_B.gimbal_mtr_yaw_pos*1e-4f - toRos->yaw;
-        // if(yaw_diff > PI){
-        //     toRos->yaw += yaw_diff - (2.0f*PI);
-        // }else if(yaw_diff < -PI){
-        //     toRos->yaw += yaw_diff + (2.0f*PI);
-        // }else{
-        //     toRos->yaw += yaw_diff;
-        // }
+        toRos->self_HP = b2g_B.self_HP;
+        toRos->match_started = b2g_B.match_started;
+
         toRos->yaw = imu_data.yaw;
+        // toRos->yaw = b2g_B.gimbal_mtr_yaw_pos*1e-4f;
         toRos->yaw_vel = imu_data.gyro[2]*DEGtoRAD;
         toRos->aim_color = b2g_B.is_enemy_red ? 1:0;
 
@@ -186,29 +187,6 @@ void remote_on_change(){
         gimbal_ctrl.flywheel_enabled = (vtm.mode_sw == VTM_SW_SPORT);
         control_timeout_update();
     }
-
-    // chasis_ctrl.robot_forward_v = (int16_t)(dr16.channel[1]*2.0f*1e3f);
-    // chasis_ctrl.robot_leftward_v = (int16_t)(-dr16.channel[0]*2.0f*1e3f);
-    // chasis_ctrl.robot_yaw_omega = 0;
-
-    // int swap_head_tail = 0;
-
-    // chasis_ctrl.spintop_level = (dr16.s2 == DR16_SWITCH_UP) ? 1:0;
-    //     chasis_ctrl.supercap_discharge = 0;
-    //     chasis_ctrl.swap_head_tail = swap_head_tail;
-    //     chasis_ctrl.chasis_yaw_follow = (dr16.s2 == DR16_SWITCH_DOWN) ? 1:0;
-
-        
-
-    //     gimbal_ctrl.swap_head_tail = swap_head_tail;
-    //     gimbal_ctrl.flywheel_enabled = (dr16.s1 == DR16_SWITCH_UP);
-    // #endif
-        // chasis_ctrl.fire_pressed = dr16.mouse.press_l;
-        // chasis_ctrl.custom_UI_drawcall = (dr16.key.v & DR16_KEY_R_BIT) ? 1:0;
-
-        // // gimbal_ctrl.fired = chasis_ctrl.fire_pressed;
-        // // gimbal_ctrl.gimbal_control_mode = dr16.mouse.press_r ? 2:1;
-        // gimbal_ctrl.feedback_shoot_speed = (uint16_t)(referee.shoot_data_0x0207.initial_speed * 1e3f);
 
 }
 

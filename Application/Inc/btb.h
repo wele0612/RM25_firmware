@@ -43,10 +43,13 @@ typedef struct __attribute__((packed)) {
     // Projectile speed from referee system, 1e-3 m/(s*LSB)
     uint16_t feedback_shoot_speed; 
 
-    uint8_t is_enemy_red : 1; // Current Enemy color
-    uint8_t RSVD : 7;
+    uint16_t self_HP; // HP value
 
-    uint8_t PAD[3];
+    uint8_t is_enemy_red : 1; // Current Enemy color
+    uint8_t match_started : 1; // Is match started
+    uint8_t RSVD : 6;
+
+    uint8_t PAD[1];
 }b2g_B_t;
 __BTB_VAR b2g_B_t b2g_B;
 #define B2G_MSG_B_ID 0x21

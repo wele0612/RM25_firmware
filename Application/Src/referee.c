@@ -90,19 +90,27 @@ void parse_referee_msg(int full_frame_size, const uint8_t* frame_begin_ptr){
     int cmd_msg_size = 0;
 
     switch(cmd_id){
-        case 0x201:
+        case 0x0001:
+            copy_dest_ptr = &(referee.game_status_0x0001);
+            cmd_msg_size = sizeof(referee.game_status_0x0001);
+            break;
+        case 0x0101:
+            copy_dest_ptr = &(referee.event_data_0x0101);
+            cmd_msg_size = sizeof(referee.event_data_0x0101);
+            break;
+        case 0x0201:
             copy_dest_ptr = &(referee.robot_status_0x0201);
             cmd_msg_size = sizeof(referee.robot_status_0x0201);
             break;
-        case 0x202:
+        case 0x0202:
             copy_dest_ptr = &(referee.power_heat_data_0x0202);
             cmd_msg_size = sizeof(referee.power_heat_data_0x0202);
             break;
-        case 0x207:
+        case 0x0207:
             copy_dest_ptr = &(referee.shoot_data_0x0207);
             cmd_msg_size = sizeof(referee.shoot_data_0x0207);
             break;
-        case 0x208:
+        case 0x0208:
             copy_dest_ptr = &(referee.projectile_allowance_0x0208);
             cmd_msg_size = sizeof(referee.projectile_allowance_0x0208);
             break;

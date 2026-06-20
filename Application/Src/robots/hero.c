@@ -327,6 +327,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     b2g_B.gimbal_mtr_yaw_pos = (int16_t)(wrap_to_pi(fmotor.yaw.position)*1e4f);
     b2g_B.feedback_shoot_speed = (int16_t)(referee.shoot_data_0x0207.initial_speed*1e3f);
     b2g_B.is_enemy_red = (referee.robot_status_0x0201.robot_id >= 100)? 1:0;
+    b2g_B.self_HP = referee.robot_status_0x0201.current_HP;
+    b2g_B.match_started = (referee.game_status_0x0001.game_progress == 4);
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
     capcan_toCap_t cap_msg;
@@ -652,8 +654,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[1]=vision_FromRos.packet.yaw;
     // vofa.val[2]=vision_online();
 
-    vofa.val[3]=vtm.channel[0];
-    vofa.val[4]=geo->abs_pitch_pos;
+    vofa.val[3]=b2g_B.match_started;
+    vofa.val[4]=b2g_B.self_HP;
     
     vofa.val[5]=geo->target_pitch_pos;
     vofa.val[6]=geo->target_yaw_vel;

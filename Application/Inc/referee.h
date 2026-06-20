@@ -7,7 +7,33 @@
 
 #include <receiver.h>
 
-// Referee system communication. Protocal Version V1.7.
+// Referee system communication. Protocal Version V1.1.0 (20251217).
+
+// CMD 0x0001
+typedef struct __attribute__((packed)) {
+    uint8_t game_type : 4;           // bit 0-3: 比赛类型（1-超级对抗赛, 2-高校单项赛, 3-AI挑战赛, 4-联盟赛3V3, 5-联盟赛步兵对抗）
+    uint8_t game_progress : 4;       // bit 4-7: 当前比赛阶段（0-未开始, 1-准备阶段, 2-十五秒自检, 3-五秒倒计时, 4-比赛中, 5-比赛结算中）
+    uint16_t stage_remain_time;      // 当前阶段剩余时间，单位：秒
+    uint64_t SyncTimeStamp;          // UNIX时间，当机器人正确连接到裁判系统的NTP服务器后生效
+} game_status_t;
+
+// CMD 0x0101
+typedef struct __attribute__((packed)) {
+    uint32_t supply_zone_non_overlap : 1;  // bit 0: 己方与资源区不重叠的补给区占领状态，1为已占领
+    uint32_t supply_zone_overlap : 1;      // bit 1: 己方与资源区重叠的补给区占领状态，1为已占领
+    uint32_t supply_zone_rmul : 1;         // bit 2: 己方补给区的占领状态，1为已占领（仅RMUL适用）
+    uint32_t small_power_status : 2;       // bit 3-4: 己方小能量机关激活状态，0-未激活，1-已激活，2-正在激活
+    uint32_t large_power_status : 2;       // bit 5-6: 己方大能量机关激活状态，0-未激活，1-已激活，2-正在激活
+    uint32_t central_highland : 2;         // bit 7-8: 己方中央高地占领状态，1-被己方占领，2-被对方占领
+    uint32_t trapezoidal_highland : 2;     // bit 9-10: 己方梯形高地占领状态，1-已占领
+    uint32_t dart_hit_time : 9;            // bit 11-19: 对方飞镖最后一次击中己方前哨站或基地的时间(0-420，开局默认为0)
+    uint32_t dart_hit_target : 3;          // bit 20-22: 对方飞镖最后一次击中目标（0-默认, 1-前哨站, 2-基地固定目标, 3-基地随机固定目标, 4-基地随机移动目标, 5-基地末端移动目标）
+    uint32_t center_gain_point : 2;        // bit 23-24: 中心增益点占领状态，0-未被占领，1-被己方占领，2-被对方占领，3-被双方占领（仅RMUL适用）
+    uint32_t fortress_gain_point : 2;      // bit 25-26: 己方堡垒增益点占领状态，0-未被占领，1-被己方占领，2-被对方占领，3-被双方占领
+    uint32_t outpost_gain_point : 2;       // bit 27-28: 己方前哨站增益点占领状态，0-未被占领，1-被己方占领，2-被对方占领
+    uint32_t base_gain_point : 1;          // bit 29: 己方基地增益点占领状态，1-已占领
+    uint32_t reserved : 2;                 // bit 30-31: 保留位
+} event_data_t;
 
 // CMD 0x0201
 typedef struct __attribute__((packed)) {
@@ -244,6 +270,8 @@ void draw_char(interaction_figure_t* fig,
 // ================ Robot Data Buffer ================
 
 typedef struct referee_info_t{
+    game_status_t game_status_0x0001;
+    event_data_t event_data_0x0101;
     robot_status_t robot_status_0x0201;
     power_heat_data_t power_heat_data_0x0202;
     shoot_data_t shoot_data_0x0207;
