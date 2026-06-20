@@ -81,7 +81,7 @@
     #ifdef CONFIG_ROBOT_AIMING_BENCH
         // GIMBAL + AIMING_BENCH configuration
         typedef struct robot_motors_t{
-            report_DM4310_t pitch;
+            report_DM4310_t test_mtr;
 
         }robot_motors_t;
 

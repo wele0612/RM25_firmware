@@ -205,70 +205,37 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
 
 #else
 
-PID_t pitch_omega_pid={
-    .P=3.0f,
-    .I=100.0f,
-    .D=0.02f,
-    .integral_max=0.01f
+PID_t test_omega_pid={
+    .P=0.5f,
+    .I=5.0f,
+    .D=0.0f,
+    .integral_max=0.1f
 };
 
-PID_t pitch_pos_pid={
-    .P=17.0f,
-    .I=0.0f,
-    .D=0.00f,
-    .integral_max=0.01f
-};
 
 // 0x0F is CAN(Slave) and 0x00 is Master
 void role_controller_init(){
-    HAL_Delay(1000);
-    fdcanx_send_data(&hfdcan3, 0x0F, enable_DM4310(motors.pitch.tranmitbuf), 8);
+    HAL_Delay(500);
+    fdcanx_send_data(&hfdcan3, 0x05, enable_DM_Joint(motors.test_mtr.tranmitbuf), 8);
 }
 
 void role_controller_step(const float CTRL_DELTA_T){
 
-    robot_geo.target_pitch_pos += -0.007f * (float)dr16.mouse.y * CTRL_DELTA_T;
-    if (robot_geo.target_pitch_pos >= 0.5f) {
-        robot_geo.target_pitch_pos = 0.5f;
-    }
-    if (robot_geo.target_pitch_pos <= -0.2f) {
-        robot_geo.target_pitch_pos = -0.2f;
-    }
-
-
-    // robot_geo.target_pitch_omega = dr16.channel[0]; 
-
-    // const float target_pitch_omega=robot_geo.target_pitch_omega;
-    const float target_pitch_pos=robot_geo.target_pitch_pos;
-    //float pitch_omega_error = target_pitch_omega - motors.pitch.speed;
-    float pitch_omega_error = 0.0f;
-    float pitch_pos_error = 0.0f;
-
-    pitch_pos_error = target_pitch_pos - imu_data.pitch; 
-    float pitch_pid_result = pid_cycle(&pitch_pos_pid, pitch_pos_error, 0.001f);
-
-    const float target_pitch_omega = pitch_pid_result; 
-
-    if (fabsf(motors.pitch.speed) < 0.05f && fabsf(imu_data.gyro[1]*(PI/180.0f)) < 0.05f){
-        pitch_omega_error = target_pitch_omega;
-    } else {
-        pitch_omega_error = target_pitch_omega - imu_data.gyro[1]*(PI/180.0f);
-    }
-    
-    float pitch_torque = 0.0f;
-    
-    pitch_torque = pid_cycle(&pitch_omega_pid, pitch_omega_error, 0.001f);
-    pitch_torque+=1.1689f*imu_data.pitch+0.3553f;
-
     // pitch_torque = 0.0f;
-    fdcanx_send_data(&hfdcan3, 0x0F, set_torque_DM4310(motors.pitch.tranmitbuf, pitch_torque), 8);
+    // fdcanx_send_data(&hfdcan3, 0x0F, set_torque_DM4310(motors.pitch.tranmitbuf, pitch_torque), 8);
 
-    vofa.val[0]=motors.pitch.position; // range 91-144
-    vofa.val[1]=motors.pitch.speed;
+    float test_mtr_target_speed = dr16.channel[3] < -0.5f ? 12.0f : 0.0f;
+    float test_err = test_mtr_target_speed - motors.test_mtr.speed;
+    float T_test = pid_cycle(&test_omega_pid, test_err, CTRL_DELTA_T);
+
+    fdcanx_send_data(&hfdcan3, 0x05, set_torque_DM4310(motors.test_mtr.tranmitbuf, T_test), 8);
+
+    vofa.val[0]=motors.test_mtr.position; 
+    vofa.val[1]=motors.test_mtr.speed;
     vofa.val[2]=imu_data.gyro[1]*(PI/180.0f);
-    vofa.val[3]=target_pitch_omega;
-    vofa.val[4]=target_pitch_pos;
-    vofa.val[5]=pitch_torque;
+    vofa.val[3]=test_mtr_target_speed;
+    vofa.val[4]=vision_FromRos.packet.forward_vel;
+    vofa.val[5]=vision_FromRos.packet.leftward_vel;
     vofa.val[6]=imu_data.pitch; // -18 deg -> 36 deg, choose 0 10 20 
     vofa.val[7]=(float)dr16.mouse.y;
     // vofa.val[6]=(float)gyro_raw[1];
@@ -277,11 +244,9 @@ void role_controller_step(const float CTRL_DELTA_T){
 
 void robot_CAN_msgcallback(int ID, uint8_t *msg){
     switch (ID){
-    case 0x0:
-        parse_feedback_DM4310(msg, &motors.pitch, 0x1F);
+    case 0x0D: //Ctrl 0x05
+        parse_feedback_DM4310(msg, &motors.test_mtr, 0x05);
         break;
-
-
     default:
         break;
     }
