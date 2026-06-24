@@ -22,8 +22,11 @@ typedef struct __attribute__((packed)){
     uint8_t vision_allow_fire : 1; // If vision allow shoot
     uint8_t custom_UI_drawcall : 1; // Request to redraw custom UI
     uint8_t bypass_shoot_heat_control : 1; // Ignore heat control and shoot. For emergency only.
+
+    uint8_t auto_respawn_enabled : 1; // Respawn now (after countdown)
+    uint8_t L5_auto_drive : 1; // L5 auto drive!!!!! (robot will not move before match starts)
     
-    uint8_t RSVD1;
+    uint8_t RSVD : 6;
 
 }chasis_ctrl_input_t;
 static_assert(sizeof(chasis_ctrl_input_t) == 8U, "Must be 8 bytes");
@@ -32,7 +35,7 @@ typedef struct __attribute__((packed)){
     int16_t gimbal_yaw_omega; // 1e-3 RAD/LSB
     int16_t gimbal_pitch_omega; // 1e-3 RAD/LSB
 
-    // 0: Disable  1: Mouse  2: Auto-aim  3: Sentry
+    // 0: Disable  1: Mouse  2: Auto-aim  3: RSVD
     uint8_t gimbal_control_mode : 2; 
     
     uint8_t swap_head_tail : 1; // Turn 180 deg to escape

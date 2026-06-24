@@ -75,9 +75,22 @@ void controller_cycle(const float CTRL_DELTA_T){
             chasis_ctrl.vision_allow_fire = (vision_FromRos.packet.mode == 2)? 1:0;
         }
 
+        if(chasis_ctrl.L5_auto_drive){
+            if(vision_online()){
+                const float speed_limit = 1.0f;
+                chasis_ctrl.robot_forward_v = limit_val(vision_FromRos.packet.forward_vel, speed_limit)*1e3f;
+                chasis_ctrl.robot_leftward_v = limit_val(vision_FromRos.packet.leftward_vel, speed_limit)*1e3f;
+            }else{
+                chasis_ctrl.robot_forward_v = 0.0f;
+                chasis_ctrl.robot_leftward_v = 0.0f;
+            }
+        }
+
         memcpy(&g2b_B.chasis_ctrl, &chasis_ctrl, sizeof(chasis_ctrl_input_t));
         fdcanx_send_data(&hfdcan1, G2B_MSG_B_ID, (uint8_t *)&g2b_B, 8);
     }
+
+    
 }
 
 void process_keyboard(uint16_t key, uint16_t* key_event, mouse_state_t* mouse){
@@ -146,45 +159,79 @@ void process_keyboard(uint16_t key, uint16_t* key_event, mouse_state_t* mouse){
         gimbal_ctrl.gimbal_control_mode = mouse->press_r ? 2:1;
 }
 
+void autodrive_mode(){
+    chasis_ctrl.L5_auto_drive = 1;
+
+    gimbal_ctrl.gimbal_yaw_omega = 0;
+    gimbal_ctrl.gimbal_pitch_omega = 0;
+    gimbal_ctrl.gimbal_control_mode = 2;
+    gimbal_ctrl.swap_head_tail = 0;
+
+    chasis_ctrl.auto_respawn_enabled = 1;
+    chasis_ctrl.bypass_shoot_heat_control = 0;
+    chasis_ctrl.custom_UI_drawcall = 0;
+    chasis_ctrl.fire_pressed = 0;
+    chasis_ctrl.spin_mode = 0;
+    chasis_ctrl.supercap_discharge = 0;
+}
+
 void remote_on_change(){
     // Priority: DR16 > Auto Sentry UART (Only when enabled) > VTM Link
     if(DR16_online()){
-        process_keyboard(dr16.key.v, &dr16.key.v_edge_event, &dr16.mouse);
+        int auto_sentry_mode = (dr16.s1 == DR16_SWITCH_UP);
+        
+        if(auto_sentry_mode){
+            autodrive_mode();
+        }else{
+            process_keyboard(dr16.key.v, &dr16.key.v_edge_event, &dr16.mouse);
+            int use_joystick = (dr16.s1 == DR16_SWITCH_DOWN);
+            
+            if(use_joystick){
+                chasis_ctrl.robot_forward_v = (int16_t)(dr16.channel[1]*2.0f*1e3f);
+                chasis_ctrl.robot_leftward_v = (int16_t)(-dr16.channel[0]*2.0f*1e3f);
+                chasis_ctrl.robot_yaw_omega = 0;
 
-        int use_joystick = (dr16.s1 == DR16_SWITCH_DOWN);
-        if(use_joystick){
-            chasis_ctrl.robot_forward_v = (int16_t)(dr16.channel[1]*2.0f*1e3f);
-            chasis_ctrl.robot_leftward_v = (int16_t)(-dr16.channel[0]*2.0f*1e3f);
-            chasis_ctrl.robot_yaw_omega = 0;
+                chasis_ctrl.fire_pressed = 0;
+                chasis_ctrl.spin_mode = 0;
+                chasis_ctrl.supercap_discharge = 0;
 
-            chasis_ctrl.fire_pressed = 0;
-            chasis_ctrl.spin_mode = 0;
-            chasis_ctrl.supercap_discharge = 0;
-
-            gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-dr16.channel[3]*2*PI*1e3f);
-            gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
+                gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-dr16.channel[3]*2*PI*1e3f);
+                gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
+            }
+            chasis_ctrl.L5_auto_drive = 0;
         }
-        gimbal_ctrl.flywheel_enabled = (dr16.s1 == DR16_SWITCH_UP);
+
+        gimbal_ctrl.flywheel_enabled = (dr16.s1 == DR16_SWITCH_UP || dr16.s1 == DR16_SWITCH_MID);
 
         control_timeout_update();
     }else if(VTM_online()){
-        process_keyboard(vtm.key.v, &vtm.key.v_edge_event, &vtm.mouse);
+        int auto_sentry_mode = (vtm.mode_sw == VTM_SW_SPORT);
 
-        int use_joystick = (vtm.mode_sw == VTM_SW_CINE);
-        if(use_joystick){
-            chasis_ctrl.robot_forward_v = (int16_t)(vtm.channel[1]*2.0f*1e3f);
-            chasis_ctrl.robot_leftward_v = (int16_t)(-vtm.channel[0]*2.0f*1e3f);
-            chasis_ctrl.robot_yaw_omega = 0;
+        if(auto_sentry_mode){
+            autodrive_mode();
+        }else{
+            process_keyboard(vtm.key.v, &vtm.key.v_edge_event, &vtm.mouse);
 
-            chasis_ctrl.fire_pressed = vtm.buttons.trigger;
-            chasis_ctrl.spin_mode = 0;
-            chasis_ctrl.supercap_discharge = 0;
+            int use_joystick = (vtm.mode_sw == VTM_SW_CINE);
+            
+            if(use_joystick){
+                chasis_ctrl.robot_forward_v = (int16_t)(vtm.channel[1]*2.0f*1e3f);
+                chasis_ctrl.robot_leftward_v = (int16_t)(-vtm.channel[0]*2.0f*1e3f);
+                chasis_ctrl.robot_yaw_omega = 0;
 
-            gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-vtm.channel[2]*2*PI*1e3f);
-            gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-vtm.channel[3]*2*PI*1e3f);
+                chasis_ctrl.fire_pressed = vtm.buttons.trigger;
+                chasis_ctrl.spin_mode = 0;
+                chasis_ctrl.supercap_discharge = 0;
+
+                gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-vtm.channel[2]*2*PI*1e3f);
+                gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-vtm.channel[3]*2*PI*1e3f);
+            }
+
+            chasis_ctrl.L5_auto_drive = 0;
         }
-        
-        gimbal_ctrl.flywheel_enabled = (vtm.mode_sw == VTM_SW_SPORT);
+
+        gimbal_ctrl.flywheel_enabled = (vtm.mode_sw == VTM_SW_SPORT || vtm.mode_sw == VTM_SW_NORMAL);
+
         control_timeout_update();
     }
 
