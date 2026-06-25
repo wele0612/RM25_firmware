@@ -79,6 +79,13 @@ PID_t agi_vel_pid={
     .integral_max=0.5f
 };
 
+enum{
+    AGI_NORMAL,
+    AGI_STALLING,
+    AGI_RECOVERING
+} agi_state;
+uint32_t agi_state_last_enter_time=0;
+
 static int prev_shoot_clicked = 0;
 
 void role_controller_step(const float CTRL_DELTA_T){
@@ -170,9 +177,42 @@ void role_controller_step(const float CTRL_DELTA_T){
     }  
 
     geo->agi_pos = fmotor.agi.position;
-    // const float agi_vel_alpha = 0.1f;
     // geo->agi_vel = (1.0f - agi_vel_alpha)*geo->agi_vel + fmotor.agi.speed*agi_vel_alpha;
     geo->agi_vel = fmotor.agi.speed;
+
+    const float agi_anti_blocking_alpha = 0.05f;
+    geo->filtered_agi_vel = (1.0f-agi_anti_blocking_alpha)*geo->filtered_agi_vel 
+        + agi_anti_blocking_alpha*geo->agi_vel;
+    geo->filtered_T_agi = (1.0f-agi_anti_blocking_alpha)*geo->filtered_T_agi 
+        + agi_anti_blocking_alpha*fmotor.agi.torque_actual;
+
+    int agi_probably_block = fabsf(geo->filtered_agi_vel)<0.1f && fabsf(geo->filtered_T_agi)>2.0f;
+    switch (agi_state){
+        case AGI_NORMAL:
+            if(agi_probably_block){
+                agi_state = AGI_STALLING;
+                agi_state_last_enter_time = HAL_GetTick();
+            }
+            break;
+        case AGI_STALLING:
+            if(!agi_probably_block){
+                agi_state = AGI_NORMAL;
+                agi_state_last_enter_time = HAL_GetTick();
+            }else if(HAL_GetTick() - agi_state_last_enter_time > 500){
+                agi_state = AGI_RECOVERING;
+                agi_state_last_enter_time = HAL_GetTick();
+            }
+            break;
+        case AGI_RECOVERING:
+            if(HAL_GetTick() - agi_state_last_enter_time > 500){
+                agi_state = AGI_NORMAL;
+                agi_state_last_enter_time = HAL_GetTick();
+            }
+            break;
+        default:
+            agi_state = AGI_NORMAL;
+            break;
+    }
 
     // geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
     int agi_in_position = (fabsf(wrap_to_pi(geo->target_agi_pos - geo->agi_pos)) < (10.0f*DEGtoRAD));
@@ -191,7 +231,10 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     int heat_control_reduce_speed = remain_heat < 80;
 
-    if(heat_control_allow_shoot && chasis_ctrl.fire_pressed){
+    if(heat_control_allow_shoot 
+        && chasis_ctrl.fire_pressed 
+        && chasis_ctrl.vision_allow_fire){
+
         if(heat_control_reduce_speed){
             geo->target_agi_vel = 1.0f*PI;
         }else{
@@ -201,8 +244,8 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_agi_vel = 0.0f;
     }
 
-    if(chasis_ctrl.agi_anti_blocking){
-        geo->T_agi = 0.1f;
+    if(chasis_ctrl.agi_anti_blocking || agi_state == AGI_RECOVERING){
+        geo->T_agi = -0.5f;
     }else{
         geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
         if(geo->target_agi_vel > 2.0f){
@@ -306,12 +349,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     ob_fx = ob_fx*(1.0f-ob_alpha) + geo->F_x*ob_alpha;
     ob_fy = ob_fy*(1.0f-ob_alpha) + geo->F_y*ob_alpha;
     vofa.val[0]=remain_heat;
-    vofa.val[1]=geo->agi_vel;
+    vofa.val[1]=geo->filtered_agi_vel;
     vofa.val[2]=geo->target_agi_vel;
-    vofa.val[3]=geo->T_agi;
-    vofa.val[4]=fmotor.agi.speed;
+    vofa.val[3]=geo->filtered_T_agi;
+    vofa.val[4]=agi_probably_block;
+    vofa.val[5]=agi_state;
 
-    vofa.val[5]=referee.projectile_allowance_0x0208.projectile_allowance_42mm;
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
     vofa.val[7]=supercap.cap_energy_percentage;
     vofa.val[8]=supercap.base_power*1e-2f;
@@ -496,6 +539,12 @@ void role_controller_step(const float CTRL_DELTA_T){
             if(turnback_completed || turnback_timeout){
                 turning_back = 0;
             }
+        }
+
+        if(chasis_ctrl.L5_auto_drive){
+            // Sentry scanning mode
+            geo->target_pitch_pos = cosf(1e-3f*3.0f*PI*HAL_GetTick())*0.15f - 0.25f;
+            yaw_vel_feedforward = PI*1.0f;
         }
 
     }
