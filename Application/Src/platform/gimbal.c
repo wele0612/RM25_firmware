@@ -90,7 +90,6 @@ void controller_cycle(const float CTRL_DELTA_T){
         fdcanx_send_data(&hfdcan1, G2B_MSG_B_ID, (uint8_t *)&g2b_B, 8);
     }
 
-    
 }
 
 void process_keyboard(uint16_t key, uint16_t* key_event, mouse_state_t* mouse){
@@ -170,9 +169,9 @@ void autodrive_mode(){
     chasis_ctrl.auto_respawn_enabled = 1;
     chasis_ctrl.bypass_shoot_heat_control = 0;
     chasis_ctrl.custom_UI_drawcall = 0;
-    chasis_ctrl.fire_pressed = 0;
-    chasis_ctrl.spin_mode = 0;
-    chasis_ctrl.supercap_discharge = 0;
+    chasis_ctrl.fire_pressed = 1;
+    chasis_ctrl.spin_mode = 3;
+    chasis_ctrl.supercap_discharge = 1;
 }
 
 void remote_on_change(){
@@ -198,7 +197,11 @@ void remote_on_change(){
                 gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-dr16.channel[3]*2*PI*1e3f);
                 gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
             }
+            if(chasis_ctrl.L5_auto_drive){
+                chasis_ctrl.spin_mode = 1;
+            }
             chasis_ctrl.L5_auto_drive = 0;
+
             chasis_ctrl.auto_respawn_enabled = 0;
         }
 
@@ -227,8 +230,11 @@ void remote_on_change(){
                 gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-vtm.channel[2]*2*PI*1e3f);
                 gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-vtm.channel[3]*2*PI*1e3f);
             }
-
+            if(chasis_ctrl.L5_auto_drive){
+                chasis_ctrl.spin_mode = 1;
+            }
             chasis_ctrl.L5_auto_drive = 0;
+
             chasis_ctrl.auto_respawn_enabled = 0;
         }
 

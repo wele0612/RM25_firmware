@@ -104,8 +104,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float power_alpha = 0.2f;
     geo->measured_power = power_alpha*m_power + (1.0f-power_alpha)*geo->measured_power;
 
-    const float input_mouse_alpha = 0.02f;
-
     /* Base control */
 
     const float WHEEL_RADIUS = 0.153f/2.0f;
@@ -147,8 +145,17 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->vx = geo->vx_b * cosby + geo->vy_b * -sinby;
     geo->vy = geo->vx_b * sinby + geo->vy_b * cosby;
 
-    geo->target_vx = -chasis_ctrl.robot_leftward_v*1e-3f;
-    geo->target_vy = chasis_ctrl.robot_forward_v*1e-3f;
+    int sentry_but_match_not_started = chasis_ctrl.L5_auto_drive &&
+        referee.game_status_0x0001.game_progress != 4;
+
+    if(sentry_but_match_not_started){
+        geo->target_vx = 0.0f;
+        geo->target_vy = 0.0f;
+    }else{
+        geo->target_vx = -chasis_ctrl.robot_leftward_v*1e-3f;
+        geo->target_vy = chasis_ctrl.robot_forward_v*1e-3f;
+    }
+    
     // geo->target_vyaw = chasis_ctrl.robot_yaw_omega*1e-3f;
     if(BTB_ONLINE && control_online()){
         if(chasis_ctrl.spin_mode == 1){
@@ -158,16 +165,13 @@ void role_controller_step(const float CTRL_DELTA_T){
         }else if(chasis_ctrl.spin_mode == 2){
             geo->target_vyaw = 2.0f*PI;
         }else if(chasis_ctrl.spin_mode == 3){
-            if( fabsf(geo->target_vx)<= 0.2f && fabsf(geo->target_vy)<=0.2f ){
-                geo->target_vyaw = 3.0f*PI 
-                    + cosf(1e-3f*HAL_GetTick()*PI*1.2f)*(PI*0.6f)
-                    + cosf(1e-3f*HAL_GetTick()*PI*3.0f)*(PI);
+            if(sentry_but_match_not_started){
+                geo->target_vyaw = 0.5f*PI;
+            }else if( fabsf(geo->target_vx)<= 0.2f && fabsf(geo->target_vy)<=0.2f ){
+                geo->target_vyaw = 4.0f*PI 
+                    + cosf(1e-3f*HAL_GetTick()*PI*1.5f)*(PI);
             }else{
-                if(chasis_ctrl.supercap_discharge){
                     geo->target_vyaw = 2.0f*PI;
-                }else{
-                    geo->target_vyaw = 3.0f*PI;
-                }
             }
         }else{
             geo->target_vyaw = 0.0f;
@@ -215,13 +219,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     }
 
     // geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
-    int agi_in_position = (fabsf(wrap_to_pi(geo->target_agi_pos - geo->agi_pos)) < (10.0f*DEGtoRAD));
+    // int agi_in_position = (fabsf(wrap_to_pi(geo->target_agi_pos - geo->agi_pos)) < (10.0f*DEGtoRAD));
 
-    int shoot_is_posedge = 0;
-    if(chasis_ctrl.vision_allow_fire){
-        shoot_is_posedge = (chasis_ctrl.fire_pressed && (!prev_shoot_clicked));
-        prev_shoot_clicked = chasis_ctrl.fire_pressed;
-    }
+    // int shoot_is_posedge = 0;
+    // if(chasis_ctrl.vision_allow_fire){
+    //     shoot_is_posedge = (chasis_ctrl.fire_pressed && (!prev_shoot_clicked));
+    //     prev_shoot_clicked = chasis_ctrl.fire_pressed;
+    // }
 
     int remain_heat = referee.robot_status_0x0201.shooter_barrel_heat_limit
         - referee.power_heat_data_0x0202.shooter_17mm_barrel_heat;
@@ -233,7 +237,8 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(heat_control_allow_shoot 
         && chasis_ctrl.fire_pressed 
-        && chasis_ctrl.vision_allow_fire){
+        && chasis_ctrl.vision_allow_fire
+        && !sentry_but_match_not_started){
 
         if(heat_control_reduce_speed){
             geo->target_agi_vel = 1.0f*PI;
@@ -298,9 +303,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     if(chasis_ctrl.supercap_discharge && supercap_online() && supercap.cap_state==CAP_ON){
         boost_power = fminf(100.0f, supercap.max_discharge_power*1e-2f);
     }
-    if(chasis_ctrl.spin_mode == 3){
-        boost_power += 10.0f;
-    }
 
     float chasis_current_scaling = m3508_quadwheel_get_scaling(
         chasis_currents, chasis_omegas, chasis_power_limit - 10.0f + boost_power);
@@ -314,7 +316,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(BTB_ONLINE){
         geo->T_yaw=limit_val(g2b_A.gimbal_request_T_yaw*1e-3f, 10.0f);
-        geo->T_yaw += friction_compensation(fmotor.yaw.speed, 0.2f, 0.2f);
+        // geo->T_yaw += friction_compensation(fmotor.yaw.speed, 0.1f, 0.5f);
     }else{
         geo->T_yaw=0.0f;
     }
@@ -425,8 +427,8 @@ PID_t flywheel_2_pid={
 
 // ------------ For gimbal mode ------------
 PID_t g_pitch_vel_pid={
-    .P=2.7f,
-    .I=60.0f,
+    .P=2.5f,
+    .I=50.0f,
     .D=0.0f,
     .integral_max=0.03f
 }; 
@@ -439,8 +441,8 @@ PID_t g_pitch_pos_pid={
 };
 
 PID_t g_yaw_vel_pid={
-    .P=2.4f,
-    .I=70.0f,
+    .P=2.2f,
+    .I=65.0f,
     .D=0.0f,
     .integral_max=0.01f
 };
@@ -461,6 +463,8 @@ void role_controller_init(){
 static int turning_back=0;
 static uint32_t turnback_start_tick=0;
 static float turnback_end_pos;
+
+static uint32_t last_recognized_target_tick=0;
 
 void role_controller_step(const float CTRL_DELTA_T){
     robot_ctrl_t *geo = &robot_geo;
@@ -543,8 +547,18 @@ void role_controller_step(const float CTRL_DELTA_T){
 
         if(chasis_ctrl.L5_auto_drive){
             // Sentry scanning mode
-            geo->target_pitch_pos = cosf(1e-3f*3.0f*PI*HAL_GetTick())*0.15f - 0.25f;
-            yaw_vel_feedforward = PI*1.0f;
+
+            if(vision_FromRos.packet.mode != 0 && vision_online()){
+                last_recognized_target_tick = HAL_GetTick();
+            }
+
+            geo->target_pitch_pos = cosf(1e-3f*3.5f*PI*HAL_GetTick())*0.15f - 0.25f;
+            // if(HAL_GetTick() - last_recognized_target_tick < 2000){
+            //     yaw_vel_feedforward = 0.0f;
+            // }else{
+            yaw_vel_feedforward = -PI*1.0f;
+            // }
+            
         }
 
     }
@@ -674,7 +688,6 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case PITCH_FEEDBACKID: 
         parse_feedback_DM4310(msg, &motors.pitch, PITCH_CTRLID);
         break;
-
     case B2G_MSG_B_ID:
         memcpy(&b2g_B, msg, 8);
         BTB_UPDATE_CNTDOWN();
