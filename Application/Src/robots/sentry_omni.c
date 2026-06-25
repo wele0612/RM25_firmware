@@ -73,10 +73,10 @@ PID_t body_yaw_pos_pid={
 };
 
 PID_t agi_vel_pid={
-    .P = 0.5f,
-    .I = 20.0f,
-    .D = 0.0f,
-    .integral_max = 0.05f
+    .P=0.5f,
+    .I=5.0f,
+    .D=0.0f,
+    .integral_max=0.5f
 };
 
 static int prev_shoot_clicked = 0;
@@ -170,6 +170,8 @@ void role_controller_step(const float CTRL_DELTA_T){
     }  
 
     geo->agi_pos = fmotor.agi.position;
+    // const float agi_vel_alpha = 0.1f;
+    // geo->agi_vel = (1.0f - agi_vel_alpha)*geo->agi_vel + fmotor.agi.speed*agi_vel_alpha;
     geo->agi_vel = fmotor.agi.speed;
 
     // geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
@@ -181,49 +183,33 @@ void role_controller_step(const float CTRL_DELTA_T){
         prev_shoot_clicked = chasis_ctrl.fire_pressed;
     }
 
+    int remain_heat = referee.robot_status_0x0201.shooter_barrel_heat_limit
+        - referee.power_heat_data_0x0202.shooter_17mm_barrel_heat;
     int heat_control_allow_shoot =
-        (referee.robot_status_0x0201.shooter_barrel_heat_limit
-        - referee.power_heat_data_0x0202.shooter_42mm_barrel_heat) >= 99
+        remain_heat >= 29
         || chasis_ctrl.bypass_shoot_heat_control;
+
+    int heat_control_reduce_speed = remain_heat < 80;
+
+    if(heat_control_allow_shoot && chasis_ctrl.fire_pressed){
+        if(heat_control_reduce_speed){
+            geo->target_agi_vel = 1.0f*PI;
+        }else{
+            geo->target_agi_vel = 4.0f*PI;
+        }
+    }else{
+        geo->target_agi_vel = 0.0f;
+    }
+
+    if(chasis_ctrl.agi_anti_blocking){
+        geo->T_agi = 0.1f;
+    }else{
+        geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
+        if(geo->target_agi_vel > 2.0f){
+            geo->T_agi += 3.0f;
+        }
+    }
     
-    // if(!referee.robot_status_0x0201.power_management_shooter_output){
-    //     agi_state = HERO_AGI_INIT;
-    // }
-    
-    // switch (agi_state) {
-    //     case HERO_AGI_INIT:
-    //         geo->target_agi_pos = geo->agi_pos;
-    //         if(referee.robot_status_0x0201.power_management_shooter_output && shoot_is_posedge){
-    //             agi_state = HERO_AGI_IDLE;
-    //         }
-    //         break;
-
-    //     case HERO_AGI_IDLE:
-    //         geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
-    //         if(shoot_is_posedge && heat_control_allow_shoot){
-    //             agi_state = HERO_AGI_PUSHING;
-    //             geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos + PI/3.0f);
-    //         }
-    //         break;
-
-    //     case HERO_AGI_PUSHING:
-    //         if(agi_in_position){
-    //             agi_state = HERO_AGI_IDLE;
-    //         }
-    //         break;
-
-    //     default:
-    //         break;
-    // }
-
-    // geo->target_agi_pos = unit_step_generator((float)(HAL_GetTick()%2000), 1000.0f)*1.5f;
-    // geo->target_agi_vel = pid_cycle(&agi_pos_pid, wrap_to_pi(geo->target_agi_pos - geo->agi_pos), CTRL_DELTA_T);
-    
-    // geo->target_agi_vel = unit_step_generator((float)(HAL_GetTick()%2000), 1000.0f)*3.0f;
-    geo->target_agi_vel = limit_val(geo->target_agi_vel, 30.0f);
-
-    geo->T_agi = pid_cycle(&agi_vel_pid, geo->target_agi_vel - geo->agi_vel, CTRL_DELTA_T);
-
     geo->F_x = pid_cycle(&body_x_vel_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
     geo->F_y = pid_cycle(&body_y_vel_pid, geo->target_vy - geo->vy, CTRL_DELTA_T);
     geo->T_base_yaw = pid_cycle(&body_yaw_vel_pid, geo->target_vyaw - geo->vyaw_wheel, CTRL_DELTA_T);
@@ -267,7 +253,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     float boost_power = 0.0f;
     if(chasis_ctrl.supercap_discharge && supercap_online() && supercap.cap_state==CAP_ON){
-        boost_power = fminf(150.0f, supercap.max_discharge_power*1e-2f);
+        boost_power = fminf(100.0f, supercap.max_discharge_power*1e-2f);
     }
     if(chasis_ctrl.spin_mode == 3){
         boost_power += 10.0f;
@@ -319,14 +305,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float ob_alpha=0.05f;
     ob_fx = ob_fx*(1.0f-ob_alpha) + geo->F_x*ob_alpha;
     ob_fy = ob_fy*(1.0f-ob_alpha) + geo->F_y*ob_alpha;
-    vofa.val[0]=sqrtf(imu_data.acc[0]*imu_data.acc[0] +
-        imu_data.acc[1]*imu_data.acc[1] + imu_data.acc[2]*imu_data.acc[2]);
-    vofa.val[1]=geo->agi_pos;
-    vofa.val[2]=geo->target_agi_pos;
+    vofa.val[0]=remain_heat;
+    vofa.val[1]=geo->agi_vel;
+    vofa.val[2]=geo->target_agi_vel;
+    vofa.val[3]=geo->T_agi;
+    vofa.val[4]=fmotor.agi.speed;
 
-    vofa.val[3]=chasis_ctrl.fire_pressed;
-
-    vofa.val[4]=supercap.max_discharge_power*1e-2f;
     vofa.val[5]=referee.projectile_allowance_0x0208.projectile_allowance_42mm;
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
     vofa.val[7]=supercap.cap_energy_percentage;
@@ -398,14 +382,14 @@ PID_t flywheel_2_pid={
 
 // ------------ For gimbal mode ------------
 PID_t g_pitch_vel_pid={
-    .P=1.0f,
-    .I=0.0f,
+    .P=2.7f,
+    .I=60.0f,
     .D=0.0f,
-    .integral_max=0.2f
+    .integral_max=0.03f
 }; 
 
 PID_t g_pitch_pos_pid={
-    .P=0.0f,
+    .P=16.0f,
     .I=0.0f,
     .D=0.0f,
     .integral_max=0.01f
@@ -446,8 +430,8 @@ void role_controller_step(const float CTRL_DELTA_T){
         fdcanx_send_data(&hfdcan3, PITCH_CTRLID, enable_DM_Joint(motors.pitch.tranmitbuf), 8);
     }
 
-    // const float PITCH_MTR_MINIMUM = -2.1f;
-    // const float PITCH_MTR_MAXIMUM = -1.2f;
+    const float PITCH_MTR_MINIMUM = 0.1f;
+    const float PITCH_MTR_MAXIMUM = 0.9f;
     geo->mtr_pitch_pos = -fmotor.pitch.position;
     geo->mtr_pitch_vel = -fmotor.pitch.speed;
 
@@ -486,15 +470,17 @@ void role_controller_step(const float CTRL_DELTA_T){
         turning_back = 0;
     }else{
         // geo->target_pitch_pos = unit_step_generator(input_pitch_vel, 1.0f)*0.3f;
-        geo->target_pitch_pos += geo->input_pitch_vel*CTRL_DELTA_T;
+        // geo->target_pitch_pos += geo->input_pitch_vel*CTRL_DELTA_T;
+        geo->target_pitch_pos = geo->abs_pitch_pos;
+        // pitch_vel_feedforward = unit_step_generator(input_pitch_vel, 1.0f)*1.0f;
         pitch_vel_feedforward = geo->input_pitch_vel;
         // pitch_vel_feedforward = 0.0f;
         pitch_acc_feedforward = 0.0f;
 
-        geo->target_yaw_pos += geo->input_yaw_vel*CTRL_DELTA_T;
+        // geo->target_yaw_pos += geo->input_yaw_vel*CTRL_DELTA_T;
         // geo->target_yaw_pos = unit_step_generator(input_yaw_vel, 0.2f)*1.0f;
         // yaw_vel_feedforward = 0.0f;
-        // geo->target_yaw_pos = geo->abs_yaw_pos;
+        geo->target_yaw_pos = geo->abs_yaw_pos;
         yaw_vel_feedforward = geo->input_yaw_vel;
         yaw_acc_feedforward = 0.0f;
 
@@ -514,20 +500,20 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     }
 
-    // const float down_range = geo->mtr_pitch_pos - PITCH_MTR_MINIMUM;
-    // const float up_range = PITCH_MTR_MAXIMUM - geo->mtr_pitch_pos;
+    const float down_range = geo->mtr_pitch_pos - PITCH_MTR_MINIMUM;
+    const float up_range = PITCH_MTR_MAXIMUM - geo->mtr_pitch_pos;
 
-    // if(geo->target_pitch_pos < geo->abs_pitch_pos - down_range){
-    //     geo->target_pitch_pos = geo->abs_pitch_pos - down_range;
-    // }else if(geo->target_pitch_pos > geo->abs_pitch_pos + up_range){
-    //     geo->target_pitch_pos = geo->abs_pitch_pos + up_range;
-    // }
+    if(geo->target_pitch_pos < geo->abs_pitch_pos - down_range){
+        geo->target_pitch_pos = geo->abs_pitch_pos - down_range;
+    }else if(geo->target_pitch_pos > geo->abs_pitch_pos + up_range){
+        geo->target_pitch_pos = geo->abs_pitch_pos + up_range;
+    }
 
-    // float min_pitch_vel = linear_map(geo->mtr_pitch_pos,
-    //     PITCH_MTR_MINIMUM, PITCH_MTR_MINIMUM + 0.2f, 0.05f, -3.0f);
+    float min_pitch_vel = linear_map(geo->mtr_pitch_pos,
+        PITCH_MTR_MINIMUM, PITCH_MTR_MINIMUM + 0.1f, 0.05f, -9.0f);
 
-    // float max_pitch_vel = linear_map(geo->mtr_pitch_pos,
-    //     PITCH_MTR_MAXIMUM - 0.2f, PITCH_MTR_MAXIMUM, 3.0f, -0.05f);
+    float max_pitch_vel = linear_map(geo->mtr_pitch_pos,
+        PITCH_MTR_MAXIMUM - 0.1f, PITCH_MTR_MAXIMUM, 9.0f, -0.05f);
 
     // For safety. Gimbal will not suddently move after reconnected to base.
     if(!BTB_ONLINE || !control_online()){
@@ -541,13 +527,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     // }
 
     geo->target_yaw_vel = pid_cycle(&g_yaw_pos_pid, wrap_to_pi(yaw_pos_err), CTRL_DELTA_T);
-    geo->target_yaw_vel = limit_val(geo->target_yaw_vel + yaw_vel_feedforward, 12.0f);
+    geo->target_yaw_vel = limit_val(geo->target_yaw_vel + yaw_vel_feedforward, 15.0f);
 
     geo->target_pitch_vel = pid_cycle(&g_pitch_pos_pid, wrap_to_pi(geo->target_pitch_pos - geo->abs_pitch_pos), CTRL_DELTA_T);
     geo->target_pitch_vel += pitch_vel_feedforward;
     
-    // geo->target_pitch_vel = fmaxf(min_pitch_vel, geo->target_pitch_vel);
-    // geo->target_pitch_vel = fminf(max_pitch_vel, geo->target_pitch_vel);
+    geo->target_pitch_vel = fmaxf(min_pitch_vel, geo->target_pitch_vel);
+    geo->target_pitch_vel = fminf(max_pitch_vel, geo->target_pitch_vel);
 
     // For safety. If vision send weird positions, stop rotating after switch to regular mode
     if(gimbal_controlled_by_vision){ geo->target_yaw_pos = geo->abs_yaw_pos; } 
@@ -555,6 +541,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // geo->target_yaw_vel = unit_step_generator(input_yaw_vel, 0.2f)*2.0f;
 
     geo->T_yaw = pid_cycle(&g_yaw_vel_pid, geo->target_yaw_vel - geo->abs_yaw_vel, CTRL_DELTA_T);
+    
     // geo->T_yaw = 0.0f;
     // Gimbal inertia characterizaion
     // if(input_yaw_vel > 1.0f){
@@ -567,9 +554,9 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(BTB_ONLINE && control_online()){
         if(gimbal_ctrl.flywheel_enabled){
-            geo->target_flywheel_rpm = 4000.0f;        
+            geo->target_flywheel_rpm = 6000.0f;        
         }else{
-            geo->target_flywheel_rpm = 1000.0f;
+            geo->target_flywheel_rpm = 1500.0f;
         }
     }else{
         geo->target_flywheel_rpm = 60.0f;
@@ -579,8 +566,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     
     geo->T_pitch = pid_cycle(&g_pitch_vel_pid, geo->target_pitch_vel - geo->abs_pitch_vel, CTRL_DELTA_T);
 
-    float gravity_feedforward = 0.0f; // TODO: measure this
-    geo->T_pitch += gravity_feedforward;
+    const float pitch_G_polyfit[3] = {-0.358f, -0.690f, 0.543f};
+    float gravity_feedforward = 
+        (geo->abs_pitch_pos * geo->abs_pitch_pos)*pitch_G_polyfit[0] +
+        geo->abs_pitch_pos*pitch_G_polyfit[1] + 
+        pitch_G_polyfit[2];
+
+    geo->T_pitch += limit_val(gravity_feedforward, 1.5f);
     
     float Tfly_1 = pid_cycle(&flywheel_1_pid, geo->target_flywheel_rpm - fmotor.flywheel_1.speed, CTRL_DELTA_T);
     float Tfly_2 = pid_cycle(&flywheel_2_pid, -geo->target_flywheel_rpm - fmotor.flywheel_2.speed, CTRL_DELTA_T);
@@ -604,16 +596,15 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     vofa.val[0]=fmotor.flywheel_1.speed;
     vofa.val[1]=-fmotor.flywheel_2.speed;
-    vofa.val[2]=geo->mtr_pitch_pos;
 
     // vofa.val[1]=vision_FromRos.packet.yaw;
     // vofa.val[2]=vision_online();
-
-    vofa.val[3]=b2g_B.match_started;
-    vofa.val[4]=b2g_B.self_HP;
+    vofa.val[2]=geo->abs_pitch_pos;
+    vofa.val[3]=geo->mtr_pitch_pos;
+    vofa.val[4]=geo->abs_pitch_vel;
     
-    vofa.val[5]=geo->target_yaw_vel;
-    vofa.val[6]=geo->T_yaw;
+    vofa.val[5]=geo->target_pitch_vel;
+    vofa.val[6]=geo->target_pitch_pos;
     // vofa.val[6]=predict_distence;
 
     vofa.val[7]=geo->abs_yaw_vel;
