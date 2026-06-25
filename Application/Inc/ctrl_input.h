@@ -25,8 +25,9 @@ typedef struct __attribute__((packed)){
 
     uint8_t auto_respawn_enabled : 1; // Respawn now (after countdown)
     uint8_t L5_auto_drive : 1; // L5 auto drive!!!!! (robot will not move before match starts)
-    
-    uint8_t RSVD : 6;
+    uint8_t agi_anti_blocking : 1; // When agitator is block, use this to turnback agitator.
+
+    uint8_t RSVD : 5;
 
 }chasis_ctrl_input_t;
 static_assert(sizeof(chasis_ctrl_input_t) == 8U, "Must be 8 bytes");

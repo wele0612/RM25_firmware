@@ -199,6 +199,7 @@ void remote_on_change(){
                 gimbal_ctrl.gimbal_yaw_omega = (int16_t)(-dr16.channel[2]*2*PI*1e3f);
             }
             chasis_ctrl.L5_auto_drive = 0;
+            chasis_ctrl.auto_respawn_enabled = 0;
         }
 
         gimbal_ctrl.flywheel_enabled = (dr16.s1 == DR16_SWITCH_UP || dr16.s1 == DR16_SWITCH_MID);
@@ -228,9 +229,11 @@ void remote_on_change(){
             }
 
             chasis_ctrl.L5_auto_drive = 0;
+            chasis_ctrl.auto_respawn_enabled = 0;
         }
 
-        gimbal_ctrl.flywheel_enabled = (vtm.mode_sw == VTM_SW_SPORT || vtm.mode_sw == VTM_SW_NORMAL);
+        gimbal_ctrl.flywheel_enabled = 1;
+        // gimbal_ctrl.flywheel_enabled = (vtm.mode_sw == VTM_SW_SPORT || vtm.mode_sw == VTM_SW_NORMAL);
 
         control_timeout_update();
     }

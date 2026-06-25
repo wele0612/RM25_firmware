@@ -19,8 +19,8 @@ typedef struct __attribute__((packed)) {
 
 // CMD 0x0101
 typedef struct __attribute__((packed)) {
-    uint32_t supply_zone_non_overlap : 1;  // bit 0: 己方与资源区不重叠的补给区占领状态，1为已占领
-    uint32_t supply_zone_overlap : 1;      // bit 1: 己方与资源区重叠的补给区占领状态，1为已占领
+    uint32_t supply_zone_non_overlap : 1;  // bit 0: 己方补给区占领状态，1为已占领
+    uint32_t supply_zone_overlap : 1;      // bit 1: 保留位
     uint32_t supply_zone_rmul : 1;         // bit 2: 己方补给区的占领状态，1为已占领（仅RMUL适用）
     uint32_t small_power_status : 2;       // bit 3-4: 己方小能量机关激活状态，0-未激活，1-已激活，2-正在激活
     uint32_t large_power_status : 2;       // bit 5-6: 己方大能量机关激活状态，0-未激活，1-已激活，2-正在激活
@@ -157,6 +157,19 @@ typedef struct __attribute__((packed)) {
     uint8_t char_data[30];
 } ext_client_custom_character_t;
 
+// Sub ID 0x120 - Sentry autonomous decision command
+typedef struct __attribute__((packed)) {
+    /* Sentry Command Word */
+    uint32_t confirm_revive : 1;               // bit 0: 哨兵机器人是否确认复活 (0-不复活, 1-确认复活)
+    uint32_t confirm_instant_revive : 1;       // bit 1: 哨兵机器人是否确认兑换立即复活 (0-不兑换, 1-确认兑换)
+    uint32_t projectile_exchange_value : 11;   // bit 2-12: 哨兵将要兑换的允许发弹量值 (开局为0, 单调递增)
+    uint32_t remote_projectile_req_count : 4;  // bit 13-16: 哨兵远程兑换允许发弹量的请求次数 (开局为0, 每次仅能增加1)
+    uint32_t remote_hp_req_count : 4;          // bit 17-20: 哨兵远程兑换血量的请求次数 (开局为0, 每次仅能增加1)
+    uint32_t posture_cmd : 2;                  // bit 21-22: 哨兵修改当前姿态指令 (1-进攻, 2-防御, 3-移动, 默认3)
+    uint32_t confirm_power_activating : 1;     // bit 23: 哨兵机器人是否确认使能量机关进入正在激活状态 (1-确认, 默认0)
+    uint32_t reserved : 8;                     // bit 24-31: 保留位
+} sentry_cmd_t;
+
 // Main interaction data structure with union
 typedef struct __attribute__((packed)) {
     uint16_t data_cmd_id;    // 子内容ID (需为开放的子内容ID)
@@ -177,6 +190,8 @@ typedef struct __attribute__((packed)) {
         interaction_figure_t five_graphics[5];   // For 0x0103
         interaction_figure_t seven_graphics[7];  // For 0x0104
         ext_client_custom_character_t char_graphic; // For 0x0110
+
+        sentry_cmd_t sentry_cmd;
         
     } user_data;
 } robot_interaction_data_t;

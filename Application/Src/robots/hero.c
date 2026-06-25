@@ -17,10 +17,20 @@
 
 #ifdef CONFIG_ROBOT_HERO
 
+const int firing_table[7][3]={ 
+        //  x   y   length   
+            3,-90,180,
+            3,-66, 120,
+            3,-58,70,
+            3,-63,45,
+            3,  -80,27,
+            3,  -100,20,
+            5,  -140,13
+        };
+
 #ifdef CONFIG_PLATFORM_BASE
 
 const float AGI_PER_POS_INCRE = 2*PI/6.0f;
-uint32_t base_startup_time = 0;
 
 // 求最近的拨盘起始位置
 static inline float get_nearest_agi_reset_pos(float current_pos){
@@ -43,9 +53,6 @@ void role_controller_init(){
     fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
     HAL_Delay(2);
     init_agi_damiao();
-
-    base_startup_time = HAL_GetTick();
-
 }
 
 PID_t body_x_vel_pid={
@@ -90,14 +97,6 @@ PID_t agi_pos_pid={
     .integral_max = 0.1f
 };
 
-const float gimbal_standby_position = 68.4f*DEGtoRAD;
-
-/* Usually, during folding stage, Yaw should turn to a specific position relative to body.
-   However, gimbal could enter a folding stage just after power-up. 
-   In this case, Yaw should not turn (even in a folding stage!) until gimbal enter a stable mode.
-*/
-int enable_folding_fixed_gimbal = 0;
-
 static enum{
     HERO_AGI_INIT,
     HERO_AGI_IDLE,
@@ -121,12 +120,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     float m_power = geo->measured_current*geo->measured_voltage;
     const float power_alpha = 0.2f;
     geo->measured_power = power_alpha*m_power + (1.0f-power_alpha)*geo->measured_power;
-
-    const float input_mouse_alpha = 0.02f;
-
-    // const float reduced_pitch_sensitivity_ratio = 0.01f;
-    // geo->input_pitch_vel = geo->input_pitch_vel*(1.0f-input_mouse_alpha) + dr16.mouse.y*control_sensitivity*input_mouse_alpha*reduced_pitch_sensitivity_ratio;
-    // geo->input_yaw_vel = geo->input_yaw_vel*(1.0f-input_mouse_alpha) + -dr16.mouse.x*control_sensitivity*input_mouse_alpha;
 
     /* Agitator control */
 
@@ -203,7 +196,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     geo->agi_pos = fmotor.agi.position;
     geo->agi_vel = fmotor.agi.speed;
 
-    // geo->target_agi_pos = get_nearest_agi_reset_pos(geo->agi_pos);
     int agi_in_position = (fabsf(wrap_to_pi(geo->target_agi_pos - geo->agi_pos)) < (10.0f*DEGtoRAD));
 
     int shoot_is_posedge = 0;
@@ -337,6 +329,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     cap_msg.rsvd1 = 0x2012;
     cap_msg.rsvd2 = 0x0712;
     fdcanx_send_data(&hfdcan1, CAPCAN_TOCAP_MSG_ID, (uint8_t *)&cap_msg, 8);
+    fdcanx_send_data(&hfdcan3, CAPCAN_TOCAP_MSG_ID, (uint8_t *)&cap_msg, 8);
 
     float estimated_total_power = 0.0f;
     estimated_total_power += m3508_estimate_power(chasis_currents[0], motors.wheel_LF.speed*RPMtoRADS);
@@ -431,13 +424,6 @@ PID_t flywheel_3_pid={
     .I=0.05f,
     .D=0.000005f,
     .integral_max=20.0f
-};
-
-PID_t feeder_1_vel_pid={
-    .P=0.1f,
-    .I=0.0f,
-    .D=0.000005f,
-    .integral_max=0.01f
 };
 
 // ------------ For gimbal mode ------------
@@ -682,16 +668,6 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     case MYACT_RPTID+0x5: 
         parse_feedback_X4_36(msg, &motors.pitch);
         break;
-    // case B2G_MSG_A_ID:
-    //     ;
-    //     gimbal_ctrl_input_t* ctrl_msg = (void *)msg;
-    //     if (ctrl_msg->gimbal_use_VTM_not_dr16){
-    //         gimbal_ctrl.gimbal_use_VTM_not_dr16 = 1;
-    //     }else{
-    //         memcpy(&gimbal_ctrl, msg, 8);
-    //     }
-    //     BTB_UPDATE_CNTDOWN();
-    //     break;
     case B2G_MSG_B_ID:
         memcpy(&b2g_B, msg, 8);
         BTB_UPDATE_CNTDOWN();

@@ -123,12 +123,13 @@ void robot_init(){
 }
 /** @warning This functions is block, DO NOT call this function in ISR
  * 此函数会阻塞，不要在中断中调用此函数。
- *  @brief Draw client UI 自定义UI绘制
+ *  @brief Draw client UI & respwan 自定义UI绘制&哨兵自动复活
  *  @param update_level Redraw level 绘制等级
  *  0:完全重绘
  *  1:更新所有非静态UI
  *  2:仅更新最关键的实时UI，最快
  */
+extern const int firing_table[7][3];
 void referee_ui_update(int updata_level){
     const uint32_t referee_frame_delay = 40;
 
@@ -140,19 +141,9 @@ void referee_ui_update(int updata_level){
     const int x_offset = 0;
     const int y_offset = 50 - (HAL_GetTick()/10)%200;
 
-    const int firing_table[7][3]={ 
-        //  x   y   length   
-            3,-90,180,
-            3,-66, 120,
-            3,-58,70,
-            3,-63,45,
-            3,  -80,27,
-            3,  -100,20,
-            5,  -140,13
-        };
-        const char firing_table_names[7][3]={
-            "f0", "f1", "f2", "f3", "f4", "f5", "f6"
-        };
+    const char firing_table_names[7][3]={
+        "f0", "f1", "f2", "f3", "f4", "f5", "f6"
+    };
 
     size_t content_length;
     uint8_t *send_buf;
@@ -317,7 +308,55 @@ void referee_ui_update(int updata_level){
 
     referee_send_frame();
 
+    // 哨兵自主复活
+    if(referee.robot_status_0x0201.current_HP <= 5 && chasis_ctrl.auto_respawn_enabled){
+        memset(ui_data.user_data.raw_data, 0, sizeof(ui_data.user_data.raw_data));
+
+        ui_data.data_cmd_id = CMD_SENTRY_DECISION;
+        ui_data.sender_id = robot_id;
+        ui_data.receiver_id = 0x8080; // 裁判系统
+
+        ui_data.user_data.sentry_cmd.confirm_revive = 1;
+
+        content_length = sizeof(sentry_cmd_t);
+        
+        referee_send_frame();
+    }
+
     #undef referee_send_frame
+}
+
+void check_and_recover_UARTs(){
+    #ifdef CONFIG_ENABLE_VISION
+    if(!vision_online()){
+        // Check vision uart. If not receiving, recover.
+        if((*AIMING_UART).RxState != HAL_UART_STATE_BUSY_RX){
+            __HAL_UNLOCK(AIMING_UART);
+            HAL_UART_DMAStop(AIMING_UART);
+            HAL_UART_Receive_DMA(AIMING_UART, aiming_dma_buf, 32);
+            __HAL_UART_ENABLE_IT(AIMING_UART, UART_IT_IDLE);
+        }
+    }
+    #endif
+
+    if(!VTM_online()){
+        // same
+        if((*VTM_UART).RxState != HAL_UART_STATE_BUSY_RX){
+            __HAL_UNLOCK(VTM_UART);
+            HAL_UART_DMAStop(VTM_UART);
+            HAL_UART_Receive_DMA(VTM_UART, vtm_dma_buf, 32);
+            __HAL_UART_ENABLE_IT(VTM_UART, UART_IT_IDLE);
+        }
+    }
+
+    if(!DR16_online()){
+        // same
+        if((*DR16_UART).RxState != HAL_UART_STATE_BUSY_RX){
+            __HAL_UNLOCK(DR16_UART);
+            HAL_UARTEx_ReceiveToIdle_DMA(DR16_UART, dr16_buffer_recv, 32);
+        }
+    }
+
 }
 
 
@@ -329,6 +368,8 @@ void robot_step(const float CTRL_DELTA_T){
     controller_cycle(CTRL_DELTA_T);
 
     HAL_UART_Transmit_DMA(&huart7, (void *)&vofa, sizeof(vofa));
+
+    check_and_recover_UARTs();
 
     //HAL_GPIO_WritePin(LED_PC13_GPIO_Port, LED_PC13_Pin, RESET);
 }

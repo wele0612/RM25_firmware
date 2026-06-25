@@ -230,6 +230,9 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     fdcanx_send_data(&hfdcan3, 0x05, set_torque_DM4310(motors.test_mtr.tranmitbuf, T_test), 8);
 
+    #include<btb.h>
+    b2g_B.self_HP = 30;
+
     vofa.val[0]=motors.test_mtr.position; 
     vofa.val[1]=motors.test_mtr.speed;
     vofa.val[2]=imu_data.gyro[1]*(PI/180.0f);
