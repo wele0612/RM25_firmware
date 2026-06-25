@@ -10,6 +10,17 @@
 
 #include<h7can.h>
 
+const int firing_table[7][3]={ 
+        //  x   y   length   
+            50,-90,180,
+            50,-66, 120,
+            50,-58,70,
+            50,-63,45,
+            50,  -80,27,
+            50,  -100,20,
+            50,  -140,13
+        };
+
 #ifdef CONFIG_PLATFORM_BASE
 
 PID_t vy_pid={
@@ -212,6 +223,12 @@ PID_t test_omega_pid={
     .integral_max=0.1f
 };
 
+PID_t flywheel_1_pid={
+    .P=0.003f,
+    .I=0.10f,
+    .D=0.000005f,
+    .integral_max=10.0f
+};
 
 // 0x0F is CAN(Slave) and 0x00 is Master
 void role_controller_init(){
@@ -229,13 +246,26 @@ void role_controller_step(const float CTRL_DELTA_T){
     float T_test = pid_cycle(&test_omega_pid, test_err, CTRL_DELTA_T);
 
     fdcanx_send_data(&hfdcan3, 0x05, set_torque_DM4310(motors.test_mtr.tranmitbuf, T_test), 8);
+    
+    float Tfly_1 = pid_cycle(&flywheel_1_pid, 120.0f - motors.flywheel_1.speed, CTRL_DELTA_T);
+
+    ESTOP_reset();
+
+    uint8_t tx_buffer[8];
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID1_4, set_current_M3508(
+        tx_buffer,
+        Tfly_1*(1/M3508_TORQUE_CONSTANT),
+        0.0f,
+        0.0f,
+        0.0f
+    ), 8);
 
     #include<btb.h>
     b2g_B.self_HP = 30;
 
     vofa.val[0]=motors.test_mtr.position; 
     vofa.val[1]=motors.test_mtr.speed;
-    vofa.val[2]=imu_data.gyro[1]*(PI/180.0f);
+    vofa.val[2]=motors.flywheel_1.speed;
     vofa.val[3]=test_mtr_target_speed;
     vofa.val[4]=vision_FromRos.packet.forward_vel;
     vofa.val[5]=vision_FromRos.packet.leftward_vel;
@@ -249,6 +279,9 @@ void robot_CAN_msgcallback(int ID, uint8_t *msg){
     switch (ID){
     case 0x0D: //Ctrl 0x05
         parse_feedback_DM4310(msg, &motors.test_mtr, 0x05);
+        break;
+    case 0x201:
+        parse_feedback_M3508(msg, &motors.flywheel_1);
         break;
     default:
         break;

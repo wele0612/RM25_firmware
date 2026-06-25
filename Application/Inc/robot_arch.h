@@ -117,7 +117,7 @@
         // GIMBAL + AIMING_BENCH configuration
         typedef struct robot_motors_t{
             report_DM4310_t test_mtr;
-
+            report_M3508_t flywheel_1;
         }robot_motors_t;
 
         typedef struct robot_ctrl_t{
@@ -281,6 +281,9 @@
 
             float agi_vel;
             float agi_pos;
+
+            float filtered_agi_vel;
+            float filtered_T_agi;
 
             float gimbal_abs_yaw_pos; // Yaw in World coordinate
             float gimbal_mtr_yaw_pos; // Yaw in body coordinate (from motor encoder)
