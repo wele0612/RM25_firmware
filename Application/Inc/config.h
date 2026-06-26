@@ -2,12 +2,13 @@
 #define __CONFIG_H
 
 //========= Choose Platform ===========
-// #define CONFIG_PLATFORM_GIMBAL
-#define CONFIG_PLATFORM_BASE
+#define CONFIG_PLATFORM_GIMBAL
+// #define CONFIG_PLATFORM_BASE
 
 //========= Choose Robot ===========
 // #define CONFIG_ROBOT_INFANTRY_BALANCE
-#define CONFIG_ROBOT_SENTRY_OMNI
+// #define CONFIG_ROBOT_SENTRY_OMNI
+#define CONFIG_ROBOT_INFANTRY_OMNI
 // #define CONFIG_ROBOT_HERO
 // #define CONFIG_ROBOT_AIMING_BENCH
 
@@ -40,6 +41,11 @@
 #endif
 
 #if defined(CONFIG_ROBOT_SENTRY_OMNI) && defined(CONFIG_PLATFORM_GIMBAL)
+    #define CONFIG_ENABLE_IMU_FLYWHEEL_FILTER
+    #define REVERSE_PITCH
+#endif
+
+#if defined(CONFIG_ROBOT_INFANTRY_OMNI) && defined(CONFIG_PLATFORM_GIMBAL)
     #define CONFIG_ENABLE_IMU_FLYWHEEL_FILTER
     #define REVERSE_PITCH
 #endif

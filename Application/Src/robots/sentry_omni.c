@@ -14,7 +14,8 @@
 #include<btb.h>
 #include<h7can.h>
 
-#ifdef CONFIG_ROBOT_SENTRY_OMNI
+// #ifdef CONFIG_ROBOT_SENTRY_OMNI
+#if defined(CONFIG_ROBOT_SENTRY_OMNI) || defined(CONFIG_ROBOT_INFANTRY_OMNI)
 
 const int firing_table[7][3]={ 
         //  x   y   length   
@@ -440,18 +441,32 @@ PID_t g_pitch_pos_pid={
     .integral_max=0.01f
 };
 
+// Note: Sentry has two lidars on its gimbal. Need a different PID
+#ifdef CONFIG_ROBOT_SENTRY_OMNI
+
 PID_t g_yaw_vel_pid={
-    .P=2.2f,
+    .P=2.3f,
     .I=65.0f,
     .D=0.0f,
     .integral_max=0.01f
 };
 
+#else
+
+PID_t g_yaw_vel_pid={
+    .P=1.5f,
+    .I=5.0f,
+    .D=0.00f,
+    .integral_max=0.1f
+};
+
+#endif
+
 PID_t g_yaw_pos_pid={
-    .P=16.0f,
+    .P=22.0f,
     .I=0.0f,
     .D=0.0f,
-    .integral_max=0.01f
+    .integral_max=0.1f
 };
 
 // uint8_t reset_zeropoint[8] = {0x64,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
@@ -584,7 +599,7 @@ void role_controller_step(const float CTRL_DELTA_T){
         geo->target_pitch_pos = geo->abs_pitch_pos;
     }
 
-    float yaw_pos_err =geo->target_yaw_pos - geo->abs_yaw_pos;
+    float yaw_pos_err = geo->target_yaw_pos - geo->abs_yaw_pos;
     // if(!gimbal_controlled_by_vision && gimbal_ctrl.swap_head_tail){
     //     yaw_pos_err += PI;
     // }
@@ -601,7 +616,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // For safety. If vision send weird positions, stop rotating after switch to regular mode
     if(gimbal_controlled_by_vision){ geo->target_yaw_pos = geo->abs_yaw_pos; } 
     
-    // geo->target_yaw_vel = unit_step_generator(input_yaw_vel, 0.2f)*2.0f;
+    // geo->target_yaw_vel = unit_step_generator(input_yaw_vel, 0.2f)*3.0f;
 
     geo->T_yaw = pid_cycle(&g_yaw_vel_pid, geo->target_yaw_vel - geo->abs_yaw_vel, CTRL_DELTA_T);
     
@@ -612,7 +627,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     // }else{
     //     geo->T_yaw = 0.0f;
     // }
+
+    #ifdef CONFIG_ROBOT_SENTRY_OMNI
     const float GIMBAL_YAW_INERTIA = 0.065f; // kg*m^2
+    #else
+    const float GIMBAL_YAW_INERTIA = 0.028f; // kg*m^2
+    #endif
+
     geo->T_yaw += yaw_acc_feedforward * (GIMBAL_YAW_INERTIA * 1.0f);
 
     if(BTB_ONLINE && control_online()){
@@ -640,14 +661,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     float Tfly_1 = pid_cycle(&flywheel_1_pid, geo->target_flywheel_rpm - fmotor.flywheel_1.speed, CTRL_DELTA_T);
     float Tfly_2 = pid_cycle(&flywheel_2_pid, -geo->target_flywheel_rpm - fmotor.flywheel_2.speed, CTRL_DELTA_T);
     
-    uint8_t tx_buffer[8];
-    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID5_8, set_current_M3508(
-        tx_buffer,
-        Tfly_1*(1/M3508_TORQUE_CONSTANT),
-        Tfly_2*(1/M3508_TORQUE_CONSTANT),
-        0.0f,
-        0.0f
-    ), 8);
 
     if(BTB_ONLINE){
         g2b_A.gimbal_request_T_yaw = (int16_t)limit_val((1e3f * geo->T_yaw), 32700.0f);
@@ -657,17 +670,29 @@ void role_controller_step(const float CTRL_DELTA_T){
     // geo->T_pitch = 0.5f;
     fdcanx_send_data(&hfdcan3, PITCH_CTRLID, set_torque_DM4310(motors.pitch.tranmitbuf, -geo->T_pitch), 8);
 
+    uint8_t tx_buffer[8];
+    ESTOP_reset();
+    fdcanx_send_data(&hfdcan2, M3508_CTRLID_ID5_8, set_current_M3508(
+        tx_buffer,
+        Tfly_1*(1/M3508_TORQUE_CONSTANT),
+        Tfly_2*(1/M3508_TORQUE_CONSTANT),
+        0.0f,
+        0.0f
+    ), 8);
+
     vofa.val[0]=fmotor.flywheel_1.speed;
     vofa.val[1]=-fmotor.flywheel_2.speed;
+    vofa.val[2]=fmotor.flywheel_1.current;
+    vofa.val[3]=fmotor.flywheel_2.current;
 
     // vofa.val[1]=vision_FromRos.packet.yaw;
     // vofa.val[2]=vision_online();
-    vofa.val[2]=geo->abs_pitch_pos;
-    vofa.val[3]=geo->mtr_pitch_pos;
+    // vofa.val[2]=geo->abs_pitch_pos;
+    // vofa.val[3]=geo->mtr_pitch_pos;
     vofa.val[4]=geo->abs_pitch_vel;
     
-    vofa.val[5]=geo->target_pitch_vel;
-    vofa.val[6]=geo->target_pitch_pos;
+    vofa.val[5]=geo->target_yaw_vel;
+    vofa.val[6]=geo->T_yaw;
     // vofa.val[6]=predict_distence;
 
     vofa.val[7]=geo->abs_yaw_vel;

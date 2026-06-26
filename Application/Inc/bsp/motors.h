@@ -21,6 +21,8 @@
 void ESTOP();
 void ESTOP_reset();
 
+int ESTOP_get_state();
+
 typedef struct report_M3508_t
 {
 	float speed;

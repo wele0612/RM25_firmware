@@ -31,7 +31,7 @@
         
     #endif
     
-    #ifdef CONFIG_ROBOT_SENTRY_OMNI
+    #if defined(CONFIG_ROBOT_SENTRY_OMNI) || defined(CONFIG_ROBOT_INFANTRY_OMNI)
         // GIMBAL + SENTRY_OMNI configuration
         #define PITCH_CTRLID 0x03
 
@@ -249,7 +249,7 @@
         }robot_ctrl_t;
     #endif
     
-    #ifdef CONFIG_ROBOT_SENTRY_OMNI
+    #if defined(CONFIG_ROBOT_SENTRY_OMNI) || defined(CONFIG_ROBOT_INFANTRY_OMNI)
         // BASE + INFANTRY_OMNI configuration
         #define YAW_CTRLID 0x04
         #define AGI_CTRLID 0x05
