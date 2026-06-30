@@ -19,13 +19,13 @@
 
 const int firing_table[7][3]={ 
         //  x   y   length   
-            50,-90,180,
-            50,-66, 120,
-            50,-58,70,
-            50,-63,45,
-            50,  -80,27,
-            50,  -100,20,
-            50,  -140,13
+            -3,-65,180,
+            -3,-52, 120,
+            -3,-45,70,
+            -3,-35,48,
+            -3, -29,30,
+            -3, -25,20,
+            -3,  -140,0
         };
 
 
@@ -445,10 +445,17 @@ PID_t g_pitch_pos_pid={
 #ifdef CONFIG_ROBOT_SENTRY_OMNI
 
 PID_t g_yaw_vel_pid={
-    .P=2.3f,
-    .I=65.0f,
+    .P=2.0f,
+    .I=10.0f,
     .D=0.0f,
-    .integral_max=0.01f
+    .integral_max=0.05f
+};
+
+PID_t g_yaw_pos_pid={
+    .P=18.0f,
+    .I=0.0f,
+    .D=0.1f,
+    .integral_max=0.1f
 };
 
 #else
@@ -460,14 +467,17 @@ PID_t g_yaw_vel_pid={
     .integral_max=0.1f
 };
 
-#endif
-
 PID_t g_yaw_pos_pid={
     .P=22.0f,
     .I=0.0f,
     .D=0.0f,
     .integral_max=0.1f
 };
+
+
+#endif
+
+
 
 // uint8_t reset_zeropoint[8] = {0x64,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 void role_controller_init(){
@@ -643,7 +653,7 @@ void role_controller_step(const float CTRL_DELTA_T){
             geo->target_flywheel_rpm = 1500.0f;
         }
     }else{
-        geo->target_flywheel_rpm = 60.0f;
+        geo->target_flywheel_rpm = 0.0f;
     }
 
     // geo->target_flywheel_rpm = 60.0f;
@@ -689,7 +699,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     // vofa.val[2]=vision_online();
     // vofa.val[2]=geo->abs_pitch_pos;
     // vofa.val[3]=geo->mtr_pitch_pos;
-    vofa.val[4]=geo->abs_pitch_vel;
+    vofa.val[4]=b2g_B.self_HP;
     
     vofa.val[5]=geo->target_yaw_vel;
     vofa.val[6]=geo->T_yaw;
