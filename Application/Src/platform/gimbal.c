@@ -224,7 +224,7 @@ void remote_on_change(){
                 chasis_ctrl.robot_yaw_omega = 0;
 
                 chasis_ctrl.fire_pressed = vtm.buttons.trigger;
-                chasis_ctrl.spin_mode = 0;
+                chasis_ctrl.spin_mode = vtm.buttons.s2 ? 3 : 0;
                 chasis_ctrl.supercap_discharge = 0;
 
                 gimbal_ctrl.gimbal_pitch_omega = (int16_t)(-vtm.channel[2]*2*PI*1e3f);

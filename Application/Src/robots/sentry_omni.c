@@ -334,7 +334,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
     capcan_toCap_t cap_msg;
-    cap_msg.power_target = (uint16_t)((chasis_power_limit - 3.0f)*100.0f);
+    cap_msg.power_target = (uint16_t)((chasis_power_limit - 10.0f)*100.0f);
     cap_msg.referee_power = (uint16_t)chasis_power_limit;
     cap_msg.rsvd1 = 0x2012;
     cap_msg.rsvd2 = 0x0712;
@@ -356,12 +356,13 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[2]=geo->target_agi_vel;
     vofa.val[3]=geo->filtered_T_agi;
     vofa.val[4]=agi_probably_block;
-    vofa.val[5]=agi_state;
+
+    vofa.val[5]=supercap.cap_state;
 
     vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
     vofa.val[7]=supercap.cap_energy_percentage;
     vofa.val[8]=supercap.base_power*1e-2f;
-    vofa.val[9]=geo->measured_power;
+    vofa.val[9]=supercap.max_discharge_power*1e-2f;
 }
 
 

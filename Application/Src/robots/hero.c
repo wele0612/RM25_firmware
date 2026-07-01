@@ -324,12 +324,12 @@ void role_controller_step(const float CTRL_DELTA_T){
     fdcanx_send_data(&hfdcan1, B2G_MSG_B_ID, (uint8_t *)&b2g_B, 8);
 
     capcan_toCap_t cap_msg;
-    cap_msg.power_target = (uint16_t)((chasis_power_limit - 3.0f)*100.0f);
+    cap_msg.power_target = (uint16_t)((chasis_power_limit - 10.0f)*100.0f);
     cap_msg.referee_power = (uint16_t)chasis_power_limit;
     cap_msg.rsvd1 = 0x2012;
     cap_msg.rsvd2 = 0x0712;
     fdcanx_send_data(&hfdcan1, CAPCAN_TOCAP_MSG_ID, (uint8_t *)&cap_msg, 8);
-    fdcanx_send_data(&hfdcan3, CAPCAN_TOCAP_MSG_ID, (uint8_t *)&cap_msg, 8);
+    // fdcanx_send_data(&hfdcan3, CAPCAN_TOCAP_MSG_ID, (uint8_t *)&cap_msg, 8);
 
     float estimated_total_power = 0.0f;
     estimated_total_power += m3508_estimate_power(chasis_currents[0], motors.wheel_LF.speed*RPMtoRADS);
@@ -342,16 +342,14 @@ void role_controller_step(const float CTRL_DELTA_T){
     const float ob_alpha=0.05f;
     ob_fx = ob_fx*(1.0f-ob_alpha) + geo->F_x*ob_alpha;
     ob_fy = ob_fy*(1.0f-ob_alpha) + geo->F_y*ob_alpha;
-    vofa.val[0]=sqrtf(imu_data.acc[0]*imu_data.acc[0] +
-        imu_data.acc[1]*imu_data.acc[1] + imu_data.acc[2]*imu_data.acc[2]);
+    vofa.val[0]=agi_state;
     vofa.val[1]=geo->agi_pos;
     vofa.val[2]=geo->target_agi_pos;
-
     vofa.val[3]=chasis_ctrl.fire_pressed;
 
     vofa.val[4]=supercap.max_discharge_power*1e-2f;
     vofa.val[5]=referee.projectile_allowance_0x0208.projectile_allowance_42mm;
-    vofa.val[6]=(float)(referee.robot_status_0x0201.chassis_power_limit);
+    vofa.val[6]=(float)(referee.robot_status_0x0201.robot_id);
     vofa.val[7]=supercap.cap_energy_percentage;
     vofa.val[8]=supercap.base_power*1e-2f;
     vofa.val[9]=geo->measured_power;
@@ -472,6 +470,10 @@ void role_controller_step(const float CTRL_DELTA_T){
     __disable_irq(); // Important Note: create a snapshot of all motor states.
     fmotor = motors; 
     __enable_irq();
+
+    // if(HAL_GetTick() % 1000){
+    //     fdcanx_send_data(&hfdcan3, PITCH_CTRLID, enable_DM_Joint(motors.pitch.tranmitbuf), 8);
+    // }
 
     const float PITCH_MTR_MINIMUM = -2.1f;
     const float PITCH_MTR_MAXIMUM = -1.2f;
@@ -594,7 +596,8 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(BTB_ONLINE && control_online()){
         if(gimbal_ctrl.flywheel_enabled){
-            geo->target_flywheel_rpm = 3675.0f;        
+            // geo->target_flywheel_rpm = 3585.0f;      
+            geo->target_flywheel_rpm = 3675.0f;  
         }else{
             geo->target_flywheel_rpm = 800.0f;
         }

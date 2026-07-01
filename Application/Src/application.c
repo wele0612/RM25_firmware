@@ -283,7 +283,7 @@ void referee_ui_update(int updata_level){
     //     960 + 30 + x_offset, 1080/2 + y_offset);
 
     int avaliable_count,low_ammocount;
-    if(referee.robot_status_0x0201.robot_id == 0x1 || referee.robot_status_0x0201.robot_id == 0x101){// 是英雄
+    if(referee.robot_status_0x0201.robot_id == 1 || referee.robot_status_0x0201.robot_id == 101){// 是英雄
         avaliable_count = referee.projectile_allowance_0x0208.projectile_allowance_42mm;
         if(avaliable_count <= 0) avaliable_count = 0;
         low_ammocount = (avaliable_count <= 3);
@@ -305,6 +305,11 @@ void referee_ui_update(int updata_level){
         chasis_ctrl.minipc_online ? COLOR_TEAM : COLOR_PURPLE, 5, 
             1920/2 - 300, 1080/2 - 230, 
             1920/2 + 300, 1080/2 + 230);
+
+    // 开小陀螺提醒
+    draw_line(&(ui_data.user_data.seven_graphics[6]), "spn", 
+                chasis_ctrl.spin_mode <= 1 ? FIGURE_OPERATION_ADD : FIGURE_OPERATION_DELETE, 5,
+                COLOR_YELLOW, 5, 1920 / 2 - 500, 1080/2 - 300, 1920 / 2 +500, 1080/2 + 300);
 
     referee_send_frame();
 
