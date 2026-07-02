@@ -84,14 +84,14 @@ PID_t body_yaw_pos_pid={
 };
 
 PID_t agi_vel_pid={
-    .P = 1.3f,
-    .I = 50.0f,
+    .P = 1.0f,
+    .I = 40.0f,
     .D = 0.0f,
-    .integral_max = 0.07f
+    .integral_max = 0.4f
 };
 
 PID_t agi_pos_pid={
-    .P = 40.0f,
+    .P = 35.0f,
     .I = 0.0f,
     .D = 0.0f,
     .integral_max = 0.1f
@@ -216,6 +216,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     switch (agi_state) {
         case HERO_AGI_INIT:
             geo->target_agi_pos = geo->agi_pos;
+            agi_vel_pid.integral = 0.0f;
             if(referee.robot_status_0x0201.power_management_shooter_output && shoot_is_posedge){
                 agi_state = HERO_AGI_IDLE;
             }
@@ -347,12 +348,15 @@ void role_controller_step(const float CTRL_DELTA_T){
     vofa.val[2]=geo->target_agi_pos;
     vofa.val[3]=chasis_ctrl.fire_pressed;
 
-    vofa.val[4]=supercap.max_discharge_power*1e-2f;
-    vofa.val[5]=referee.projectile_allowance_0x0208.projectile_allowance_42mm;
-    vofa.val[6]=(float)(referee.robot_status_0x0201.robot_id);
-    vofa.val[7]=supercap.cap_energy_percentage;
-    vofa.val[8]=supercap.base_power*1e-2f;
-    vofa.val[9]=geo->measured_power;
+    vofa.val[4]=geo->T_agi;
+    vofa.val[5]=agi_vel_pid.integral;
+
+    vofa.val[6]=fmotor.agi.err_code;
+
+    // vofa.val[6]=supercap.max_discharge_power*1e-2f;
+    // vofa.val[7]=supercap.cap_energy_percentage;
+    // vofa.val[8]=supercap.base_power*1e-2f;
+    // vofa.val[9]=geo->measured_power;
 }
 
 
@@ -470,10 +474,6 @@ void role_controller_step(const float CTRL_DELTA_T){
     __disable_irq(); // Important Note: create a snapshot of all motor states.
     fmotor = motors; 
     __enable_irq();
-
-    // if(HAL_GetTick() % 1000){
-    //     fdcanx_send_data(&hfdcan3, PITCH_CTRLID, enable_DM_Joint(motors.pitch.tranmitbuf), 8);
-    // }
 
     const float PITCH_MTR_MINIMUM = -2.1f;
     const float PITCH_MTR_MAXIMUM = -1.2f;
@@ -597,7 +597,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     if(BTB_ONLINE && control_online()){
         if(gimbal_ctrl.flywheel_enabled){
             // geo->target_flywheel_rpm = 3585.0f;      
-            geo->target_flywheel_rpm = 3675.0f;  
+            geo->target_flywheel_rpm = 3575.0f;  
         }else{
             geo->target_flywheel_rpm = 800.0f;
         }
