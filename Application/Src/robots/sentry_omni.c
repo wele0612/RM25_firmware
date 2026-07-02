@@ -96,7 +96,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    if(HAL_GetTick() % 500){
+    if(HAL_GetTick() % 500 == 0){
         fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
         fdcanx_send_data(&hfdcan3, AGI_CTRLID, enable_DM_Joint(motors.agi.tranmitbuf), 8);
     }
@@ -172,7 +172,12 @@ void role_controller_step(const float CTRL_DELTA_T){
                 geo->target_vyaw = 4.0f*PI 
                     + cosf(1e-3f*HAL_GetTick()*PI*1.5f)*(PI);
             }else{
+                if(chasis_ctrl.L5_auto_drive){
+                    geo->target_vyaw = 3.0f*PI;
+                }else{
                     geo->target_vyaw = 2.0f*PI;
+                }
+                    
             }
         }else{
             geo->target_vyaw = 0.0f;
@@ -257,6 +262,12 @@ void role_controller_step(const float CTRL_DELTA_T){
         if(geo->target_agi_vel > 2.0f){
             geo->T_agi += 3.0f;
         }
+
+        if(referee.game_status_0x0001.game_progress != 4
+            && fabsf(geo->target_agi_vel < 0.1f)){
+
+            geo->T_agi = 0.0f;
+        }
     }
     
     geo->F_x = pid_cycle(&body_x_vel_pid, geo->target_vx - geo->vx, CTRL_DELTA_T);
@@ -317,6 +328,7 @@ void role_controller_step(const float CTRL_DELTA_T){
 
     if(BTB_ONLINE){
         geo->T_yaw=limit_val(g2b_A.gimbal_request_T_yaw*1e-3f, 10.0f);
+
         // geo->T_yaw += friction_compensation(fmotor.yaw.speed, 0.1f, 0.5f);
     }else{
         geo->T_yaw=0.0f;
@@ -499,7 +511,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    if(HAL_GetTick() % 1000){
+    if(HAL_GetTick() % 1000 == 0){
         fdcanx_send_data(&hfdcan3, PITCH_CTRLID, enable_DM_Joint(motors.pitch.tranmitbuf), 8);
     }
 
