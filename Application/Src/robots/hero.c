@@ -112,7 +112,7 @@ void role_controller_step(const float CTRL_DELTA_T){
     fmotor = motors; 
     __enable_irq();
 
-    if(HAL_GetTick() % 500){
+    if(HAL_GetTick() % 500 == 0){
         fdcanx_send_data(&hfdcan3, YAW_CTRLID, enable_DM_Joint(motors.yaw.tranmitbuf), 8);
         fdcanx_send_data(&hfdcan3, AGI_CTRLID, enable_DM_Joint(motors.agi.tranmitbuf), 8);
     }
